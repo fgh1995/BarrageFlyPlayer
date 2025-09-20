@@ -1,0 +1,22 @@
+{
+  "name": "danmu-display-server",
+  "version": "1.0.0",
+  "description": "一个基于[Barrage Fly-让弹幕飞]的项目，将几大平台的弹幕聚合到一个视频播放器上，本项目使用AI生成，如有BUG请自行解决。",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "server": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "rsocket-core": "^0.0.27",
+    "rsocket-flowable": "^0.0.27",
+    "rsocket-websocket-client": "^0.0.27",
+    "socket.io": "^4.8.1",
+    "ws": "^8.14.2"
+  },
+  "keywords": ["danmu", "websocket", "live-streaming"],
+  "author": "Your Name",
+  "license": "MIT"
+}

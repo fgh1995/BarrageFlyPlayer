@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>让子弹飞播放器-弹幕聚合播放器</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- 引入 DPlayer 播放器 -->
+    <link href="https://cdn.jsdelivr.net/npm/dplayer/dist/DPlayer.min.css" rel="stylesheet">
+    <!-- 引入Font Awesome图标 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>让子弹飞播放器-弹幕聚合播放器</h1>
+            <p class="subtitle">一个基于[Barrage Fly-让弹幕飞]的项目，将几大平台的弹幕聚合到一个视频播放器上，本项目使用AI生成，如有BUG请自行解决。</p>
+        </header>
+        
+        <div class="dashboard">
+            <div class="stats-container">
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-label">连接状态</div>
+                        <div class="stat-value" id="connection-status">已断开</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">弹幕数量</div>
+                        <div class="stat-value" id="danmu-count">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">房间数量</div>
+                        <div class="stat-value" id="room-count">4</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">弹幕轨道</div>
+                        <div class="stat-value" id="track-count">0/8</div>
+                    </div>
+                </div>
+                
+                <!-- 视频播放器容器 -->
+                <div class="video-container">
+                    <div id="dplayer"></div>
+                    <!-- 弹幕容器放在视频上方 -->
+                    <div class="danmu-container" id="danmu-container"></div>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <!-- 任务ID管理 -->
+                <div class="control-group">
+                    <label for="task-id-input">BarrageFly-WS通信地址</label>
+                    <div class="task-id-input-group">
+                        <input type="text" id="barragefly-ws-address-input" placeholder="请输入BarrageFly-WS通信地址">
+                        <button id="barragefly-ws-address-set-btn">设置</button>
+                    </div>
+                    <label for="task-id-input">任务ID管理（支持0000[备注]格式）</label>
+                    <div class="task-id-input-group">
+                        <input type="text" id="task-id-input" placeholder="输入任务ID (用逗号分隔多个ID)">
+                        <button id="add-task-btn">添加</button>
+                    </div>
+                    <div class="task-id-list-container">
+                        <select multiple id="task-id-list" size="4"></select>
+                        <button id="remove-task-btn">删除选中</button>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>弹幕显示区域</label>
+                    <div style="display: flex; gap: 5px;">
+                        <button id="full-screen-danmu" class="area-btn active">全屏</button>
+                        <button id="half-screen-danmu" class="area-btn">半屏</button>
+                        <button id="third-screen-danmu" class="area-btn">1/3屏</button>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label for="speed-control">弹幕速度 (<span id="speed-value">150</span>px/s)</label>
+                    <input type="range" id="speed-control" min="50" max="500" value="150" step="10">
+                </div>
+                <div class="control-group">
+                    <label for="opacity-control">弹幕透明度 (<span id="opacity-value">0.8</span>)</label>
+                    <input type="range" id="opacity-control" min="0.1" max="1" value="0.8" step="0.1">
+                </div>
+                <div class="control-group">
+                    <label for="font-size-control">字体大小</label>
+                    <select id="font-size-control">
+                        <option value="16">小</option>
+                        <option value="20" selected>中</option>
+                        <option value="24">大</option>
+                        <option value="28">特大</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <button id="clear-btn">清空弹幕</button>
+                    <button id="toggle-danmu-btn">隐藏弹幕</button>
+                </div>
+                <div class="control-group">
+                    <label for="stream-url">直播流地址</label>
+                    <input type="text" id="stream-url" placeholder="输入直播流地址 (m3u8/mp4/flv/rtmp等)" value="">
+                </div>
+                <div class="control-group">
+                    <button id="play-btn">播放</button>
+                    <button id="pause-btn" style="display:none;">暂停</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="message-log-container">
+            <div class="message-log-header">
+                <span>消息日志</span>
+                <button id="clear-log-btn">清空日志</button>
+            </div>
+            <div class="message-log" id="message-log">
+                <div class="message message-system">系统准备就绪，等待连接WebSocket服务器...</div>
+            </div>
+        </div>
+        
+        <div class="status-bar">
+            <div>服务器: <span id="server-url">ws://localhost:9898</span></div>
+            <div>任务ID: <span id="task-ids">等待获取中...</span></div>
+            <div>版本: <span id="version-info">v1.0.0</span></div>
+        </div>
+        <!-- 底部项目链接 -->
+        <div class="footer-links">
+            <div class="footer-title">相关项目</div>
+            <div class="project-cards">
+                <a href="https://github.com/OrdinaryRoad-Project/ordinaryroad-barrage-fly" target="_blank" class="project-card">
+                    <i class="fab fa-github"></i>
+                    <div class="project-info">
+                        <div class="project-name">Barrage Fly - 让弹幕飞</div>
+                        <div class="project-url">https://github.com/OrdinaryRoad-Project/ordinaryroad-barrage-fly</div>
+                    </div>
+                </a>
+                <a href="https://github.com/fgh1995/Barrage-Fly-Player" target="_blank" class="project-card">
+                    <i class="fab fa-github"></i>
+                    <div class="project-info">
+                        <div class="project-name">Barrage Fly Player - 让弹幕飞播放器</div>
+                        <div class="project-url">https://github.com/fgh1995/Barrage-Fly-Player</div>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 引入 DPlayer 及其依赖 -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js/dist/hls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dplayer/dist/DPlayer.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
