@@ -17,7 +17,7 @@ let danmaku = null;
 let adminPassword = "";
 // DOM元素
 let danmuContainer, messageLog, connectionStatus, danmuCountElement, roomCountElement, serverUrlElement, streamUrlElement, barrageflyWsInput, barrageflyWsSetBtn,adminSettings,adminPasswordSetBtn;
-let speedControl, speedValue, opacityControl, opacityValue, fontSizeControl;
+let speedControl, speedValue, opacityControl, opacityValue, fontSizeControl,fontSizeValue;
 let clearBtn, clearLogBtn, toggleDanmuBtn, playBtn, pauseBtn, streamUrlInput, trackCountElement;
 
 // 视频播放器变量
@@ -48,7 +48,8 @@ function initializeDanmaku() {
             fontSize: fontSize,
             // 其他配置选项可以根据需要添加
         });
-        
+        // 设置初始字体大小类
+        adjustDanmuContainerClass(fontSize);
         console.log('Danmaku初始化成功');
     } catch (error) {
         console.error('Danmaku初始化失败:', error);
@@ -70,6 +71,7 @@ function initializeDOMElements() {
     opacityControl = document.getElementById('opacity-control');
     opacityValue = document.getElementById('opacity-value');
     fontSizeControl = document.getElementById('font-size-control');
+    fontSizeValue = document.getElementById('font-size-value');
     clearBtn = document.getElementById('clear-btn');
     clearLogBtn = document.getElementById('clear-log-btn');
     toggleDanmuBtn = document.getElementById('toggle-danmu-btn');
@@ -206,6 +208,7 @@ function setupEventListeners() {
         console.error('控件元素未找到');
         return;
     }
+    
     // 打开/关闭设置按钮
     if (adminPasswordSetBtn) {
         adminPasswordSetBtn.addEventListener('click', () => {
@@ -280,11 +283,17 @@ function setupEventListeners() {
     });
     
     // 字体大小控制
-    fontSizeControl.addEventListener('change', (e) => {
+    fontSizeControl.addEventListener('input', (e) => {
         fontSize = parseInt(e.target.value);
+        if (fontSizeValue) {
+            fontSizeValue.textContent = fontSize;
+        }
         if (danmaku) {
             danmaku.fontSize = fontSize;
         }
+        
+        // 根据字体大小调整弹幕容器类
+        adjustDanmuContainerClass(fontSize);
     });
     
     // 清空弹幕
@@ -419,6 +428,23 @@ function setupEventListeners() {
     
     // 初始化任务ID列表
     initializeTaskIdList();
+}
+function adjustDanmuContainerClass(fontSize) {
+    if (!danmuContainer) return;
+    
+    // 移除所有字体类
+    danmuContainer.classList.remove('font-small', 'font-medium', 'font-large', 'font-xlarge');
+    
+    // 根据字体大小添加相应的类
+    if (fontSize <= 16) {
+        danmuContainer.classList.add('font-small');
+    } else if (fontSize <= 20) {
+        danmuContainer.classList.add('font-medium');
+    } else if (fontSize <= 24) {
+        danmuContainer.classList.add('font-large');
+    } else {
+        danmuContainer.classList.add('font-xlarge');
+    }
 }
 // 初始化任务ID列表
 function initializeTaskIdList() {

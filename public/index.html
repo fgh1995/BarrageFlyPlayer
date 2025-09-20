@@ -55,7 +55,7 @@
             <div class="controls">
                 <div class="control-group">
                     <label for="admin-password">管理员密码</label>
-                    <input type="text" id="admin-password-input" placeholder="请输入管理员密码" value="123">
+                    <input type="text" id="admin-password-input" placeholder="请输入管理员密码" value="f36096">
                     <button id="admin-password-set-btn">打开设置</button>
                 </div>
                 
@@ -107,13 +107,8 @@
                     <input type="range" id="opacity-control" min="0.1" max="1" value="0.8" step="0.1">
                 </div>
                 <div class="control-group">
-                    <label for="font-size-control">字体大小</label>
-                    <select id="font-size-control">
-                        <option value="16">小</option>
-                        <option value="20" selected>中</option>
-                        <option value="24">大</option>
-                        <option value="28">特大</option>
-                    </select>
+                    <label for="font-size-control">字体大小 (<span id="font-size-value">20</span>px)</label>
+                    <input type="range" id="font-size-control" min="12" max="80" value="40" step="1">
                 </div>
                 <div class="control-group">
                     <button id="clear-btn">清空弹幕</button>
@@ -135,7 +130,7 @@
         <div class="status-bar">
             <div>服务器: <span id="server-url">等待获取中...</span></div>
             <div>任务ID: <span id="task-ids">等待获取中...</span></div>
-            <div>版本: <span id="version-info">v1.1.1</span></div>
+            <div>版本: <span id="version-info">v1.1.2</span></div>
         </div>
         <!-- 底部项目链接 -->
         <div class="footer-links">
