@@ -9,11 +9,17 @@
     <link href="https://cdn.jsdelivr.net/npm/dplayer/dist/DPlayer.min.css" rel="stylesheet">
     <!-- 引入Font Awesome图标 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/danmaku/dist/danmaku.min.js"></script>
+    <style>
+        .admin-setting {
+            display: none; /* 默认隐藏管理员设置 */
+        }
+    </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>让子弹飞播放器-弹幕聚合播放器</h1>
+            <h1>让弹幕飞播放器-弹幕聚合播放器</h1>
             <p class="subtitle">一个基于[Barrage Fly-让弹幕飞]的项目，将几大平台的弹幕聚合到一个视频播放器上，本项目使用AI生成，如有BUG请自行解决。</p>
         </header>
         
@@ -21,8 +27,12 @@
             <div class="stats-container">
                 <div class="stats">
                     <div class="stat-card">
-                        <div class="stat-label">连接状态</div>
-                        <div class="stat-value" id="connection-status">已断开</div>
+                        <div class="stat-label">转发器连接状态</div>
+                        <div class="stat-value" id="forwarder-connection-status">未知</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">BarrageFly-连接状态</div>
+                        <div class="stat-value" id="connection-status">未知</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">弹幕数量</div>
@@ -31,10 +41,6 @@
                     <div class="stat-card">
                         <div class="stat-label">房间数量</div>
                         <div class="stat-value" id="room-count">4</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">弹幕轨道</div>
-                        <div class="stat-value" id="track-count">0/8</div>
                     </div>
                 </div>
                 
@@ -47,13 +53,23 @@
             </div>
             
             <div class="controls">
-                <!-- 任务ID管理 -->
                 <div class="control-group">
-                    <label for="task-id-input">BarrageFly-WS通信地址</label>
+                    <label for="admin-password">管理员密码</label>
+                    <input type="text" id="admin-password-input" placeholder="请输入管理员密码" value="123">
+                    <button id="admin-password-set-btn">打开设置</button>
+                </div>
+                
+                <!-- BarrageFly-WS通信地址设置 -->
+                <div class="control-group admin-setting" id="barragefly-ws-group">
+                    <label for="barragefly-ws-address-input">BarrageFly-WS通信地址</label>
                     <div class="task-id-input-group">
                         <input type="text" id="barragefly-ws-address-input" placeholder="请输入BarrageFly-WS通信地址">
                         <button id="barragefly-ws-address-set-btn">设置</button>
                     </div>
+                </div>
+                
+                <!-- 任务ID管理 -->
+                <div class="control-group admin-setting" id="task-id-group">
                     <label for="task-id-input">任务ID管理（支持0000[备注]格式）</label>
                     <div class="task-id-input-group">
                         <input type="text" id="task-id-input" placeholder="输入任务ID (用逗号分隔多个ID)">
@@ -63,6 +79,16 @@
                         <select multiple id="task-id-list" size="4"></select>
                         <button id="remove-task-btn">删除选中</button>
                     </div>
+                </div>
+                
+                <!-- 直播流地址 -->
+                <div class="control-group">
+                    <label for="stream-url">直播流地址</label>
+                    <input type="text" id="stream-url" placeholder="输入直播流地址 (m3u8/mp4/flv/rtmp等)" value="">
+                </div>
+                <div class="control-group">
+                    <button id="play-btn">播放</button>
+                    <button id="pause-btn" style="display:none;">暂停</button>
                 </div>
                 <div class="control-group">
                     <label>弹幕显示区域</label>
@@ -93,14 +119,6 @@
                     <button id="clear-btn">清空弹幕</button>
                     <button id="toggle-danmu-btn">隐藏弹幕</button>
                 </div>
-                <div class="control-group">
-                    <label for="stream-url">直播流地址</label>
-                    <input type="text" id="stream-url" placeholder="输入直播流地址 (m3u8/mp4/flv/rtmp等)" value="">
-                </div>
-                <div class="control-group">
-                    <button id="play-btn">播放</button>
-                    <button id="pause-btn" style="display:none;">暂停</button>
-                </div>
             </div>
         </div>
         
@@ -115,9 +133,9 @@
         </div>
         
         <div class="status-bar">
-            <div>服务器: <span id="server-url">ws://localhost:9898</span></div>
+            <div>服务器: <span id="server-url">等待获取中...</span></div>
             <div>任务ID: <span id="task-ids">等待获取中...</span></div>
-            <div>版本: <span id="version-info">v1.0.0</span></div>
+            <div>版本: <span id="version-info">v1.1.0</span></div>
         </div>
         <!-- 底部项目链接 -->
         <div class="footer-links">
@@ -142,6 +160,7 @@
     </div>
     
     <!-- 引入 DPlayer 及其依赖 -->
+    <script src="https://cdn.jsdelivr.net/npm/flv.js/dist/flv.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js/dist/hls.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dplayer/dist/DPlayer.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>

@@ -3,11 +3,10 @@ const http = require('http');
 const socketIo = require('socket.io');
 const { WebSocketClient, CMD } = require('./WebSocketClient');
 const WebSocket = require('ws');
-
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
-
+const ADMIN_PASSWORD = "123"; // 默认管理员密码
 // 静态文件服务
 app.use(express.static('public'));
 
@@ -23,9 +22,21 @@ io.on('connection', (socket) => {
     
     // 发送当前订阅的任务ID列表给新连接的客户端
     socket.emit('current-subscriptions', taskIds);
-    socket.emit('current-barrage-fly-ws-connect', isBarrageFlyWSConnect,url);
-    // 处理订阅请求
+    socket.emit('current-barrage-fly-ws-connect', isBarrageFlyWSConnect, url);
+    
+    // 添加密码验证函数
+    function verifyPassword(password, action) {
+        if (password !== ADMIN_PASSWORD) {
+            socket.emit('system-message', `错误: ${action} 需要管理员权限，密码错误`);
+            return false;
+        }
+        return true;
+    }
+    
+    // 处理订阅请求 - 添加密码验证
     socket.on('subscribe', (data) => {
+        if (!verifyPassword(data.password, "订阅任务")) return;
+        
         console.log('收到订阅请求:', data);
         
         // 添加新的任务ID到列表（避免重复），保存带备注的数据
@@ -50,8 +61,10 @@ io.on('connection', (socket) => {
         io.emit('current-subscriptions', taskIds);
     });
     
-    // 处理取消订阅请求
+    // 处理取消订阅请求 - 添加密码验证
     socket.on('unsubscribe', (data) => {
+        if (!verifyPassword(data.password, "取消订阅")) return;
+        
         console.log('收到取消订阅请求:', data);
         
         // 从任务ID列表中移除（使用带备注的完整ID）
@@ -77,32 +90,10 @@ io.on('connection', (socket) => {
         io.emit('current-subscriptions', taskIds);
     });
     
-    socket.on('get-ws-url', () => {
-        socket.emit('current-ws-url', url);
-    });
-    
-    socket.on('get-stream-url', () => {
-        socket.emit('current-stream-url', streamUrl);
-    });
-    
-    // 处理获取订阅列表的请求
-    socket.on('get-subscriptions', () => {
-        socket.emit('current-subscriptions', taskIds);
-    });
-       socket.on('get-barrage-fly-ws-connect', () => {
-        socket.emit('current-barrage-fly-ws-connect', isBarrageFlyWSConnect);
-    });
-    socket.on('disconnect', () => {
-        console.log('前端客户端已断开');
-    });
-    
-    socket.on('set-stream-url', (newStreamUrl) => {
-        streamUrl = newStreamUrl;
-        console.log('保存直播流地址:' + streamUrl);
-        socket.emit('system-message', `直播流地址已设置为: ${streamUrl}`);
-    });
-
-    socket.on('close-barrage-fly-ws', () => {
+    // 处理关闭BarrageFly-WS连接 - 添加密码验证
+    socket.on('close-barrage-fly-ws', (password) => {
+        if (!verifyPassword(password, "断开BarrageFly连接")) return;
+        
         console.log('主动关闭BarrageFly-WebSocket连接:' + url);
         socket.emit('system-message', '主动关闭BarrageFly-WebSocket连接:' + url);
         if (client) {
@@ -110,8 +101,22 @@ io.on('connection', (socket) => {
         }
         isBarrageFlyWSConnect = false;
     });
-
-    socket.on('set-barrage-fly-ws', (barrageFlyWSUrl) => {
+    socket.on('verify-admin-password', (password) => {
+        const isValid = password === ADMIN_PASSWORD;
+        socket.emit('admin-password-result', { success: isValid });
+        
+        if (isValid) {
+            console.log('管理员密码验证成功');
+            socket.emit('system-message', '管理员密码验证成功');
+        } else {
+            console.log('管理员密码验证失败');
+            socket.emit('system-message', '管理员密码错误');
+        }
+    });
+    // 处理设置BarrageFly-WS地址 - 添加密码验证
+    socket.on('set-barrage-fly-ws', (barrageFlyWSUrl, password) => {
+        if (!verifyPassword(password, "设置BarrageFly地址")) return;
+        
         // 校验URL有效性
         if (!isValidWebSocketURL(barrageFlyWSUrl)) {
             console.error('无效的WebSocket URL:', barrageFlyWSUrl);
@@ -186,7 +191,16 @@ io.on('connection', (socket) => {
                 io.emit('system-message', `连接失败: ${err.message}`);
                 client = null;
             });
-    }); 
+    });
+    
+    // 处理设置直播流地址 - 添加密码验证
+    socket.on('set-stream-url', (newStreamUrl, password) => {
+        if (!verifyPassword(password, "设置直播流地址")) return;
+        
+        streamUrl = newStreamUrl;
+        console.log('保存直播流地址:' + streamUrl);
+        socket.emit('system-message', `直播流地址已设置为: ${streamUrl}`);
+    });
 });
 
 // URL有效性校验函数

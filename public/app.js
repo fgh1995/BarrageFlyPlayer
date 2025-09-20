@@ -11,16 +11,12 @@ let danmuSpeed = 150; // px/s
 let danmuOpacity = 0.8;
 let fontSize = 20;
 let danmuVisible = true;
-
-// 弹幕轨道管理
-const danmuTracks = {
-    total: 8, // 总共8个轨道
-    occupied: new Array(8).fill(false),
-    lastUseTime: new Array(8).fill(0)
-};
-
+let adminSettingsOpen = false;
+// Danmaku 实例
+let danmaku = null;
+let adminPassword = "";
 // DOM元素
-let danmuContainer, messageLog, connectionStatus, danmuCountElement,roomCountElement,serverUrlElement,streamUrlElement,barrageflyWsInput,barrageflyWsSetBtn;
+let danmuContainer, messageLog, connectionStatus, danmuCountElement, roomCountElement, serverUrlElement, streamUrlElement, barrageflyWsInput, barrageflyWsSetBtn,adminSettings,adminPasswordSetBtn;
 let speedControl, speedValue, opacityControl, opacityValue, fontSizeControl;
 let clearBtn, clearLogBtn, toggleDanmuBtn, playBtn, pauseBtn, streamUrlInput, trackCountElement;
 
@@ -36,7 +32,29 @@ function init() {
     setupEventListeners();
     initializeSocket();
     initializeVideoPlayer();
-    updateTrackCount();
+    initializeDanmaku(); // 初始化弹幕库
+    toggleAdminSettings(false);    // 初始化时隐藏管理员设置
+}
+
+// 初始化Danmaku弹幕库
+function initializeDanmaku() {
+    if (!danmuContainer) return;
+    
+    try {
+        danmaku = new Danmaku({
+            container: danmuContainer,
+            speed: danmuSpeed,
+            opacity: danmuOpacity,
+            fontSize: fontSize,
+            // 其他配置选项可以根据需要添加
+        });
+        
+        console.log('Danmaku初始化成功');
+    } catch (error) {
+        console.error('Danmaku初始化失败:', error);
+        addSystemMessage('弹幕库初始化失败，将使用备用模式');
+        // 可以在这里设置备用模式
+    }
 }
 
 // 初始化DOM元素
@@ -44,6 +62,7 @@ function initializeDOMElements() {
     danmuContainer = document.getElementById('danmu-container');
     messageLog = document.getElementById('message-log');
     connectionStatus = document.getElementById('connection-status');
+    forwarderConnectionStatus = document.getElementById('forwarder-connection-status');
     danmuCountElement = document.getElementById('danmu-count');
     roomCountElement = document.getElementById('room-count');
     speedControl = document.getElementById('speed-control');
@@ -70,6 +89,9 @@ function initializeDOMElements() {
     thirdScreenDanmuBtn = document.getElementById('third-screen-danmu');
     barrageflyWsInput = document.getElementById('barragefly-ws-address-input');
     barrageflyWsSetBtn = document.getElementById('barragefly-ws-address-set-btn');
+    adminPasswordInput = document.getElementById('admin-password-input');
+    adminSettings = document.querySelectorAll('.admin-setting');
+    adminPasswordSetBtn = document.getElementById('admin-password-set-btn');
 }
 
 // 初始化Socket连接
@@ -101,10 +123,18 @@ function initializeVideoPlayer() {
         // 监听全屏变化
         dp.on('fullscreen', () => {
             adjustDanmuForFullscreen();
+            // 添加延迟确保全屏完全生效
+            setTimeout(() => {
+                adjustDanmuForFullscreen();
+            }, 300);
         });
         
         dp.on('fullscreen_cancel', () => {
             adjustDanmuForFullscreen();
+            // 添加延迟确保退出全屏完全生效
+            setTimeout(() => {
+                adjustDanmuForFullscreen();
+            }, 300);
         });
         
         // 播放器事件
@@ -135,13 +165,40 @@ function initializeVideoPlayer() {
 
 // 调整弹幕全屏适配
 function adjustDanmuForFullscreen() {
-    document.getElementById('dplayer').appendChild(danmuContainer);
+    // 确保弹幕容器在视频播放器内
+    const dplayer = document.getElementById('dplayer');
+    if (dplayer && danmuContainer && !dplayer.contains(danmuContainer)) {
+        dplayer.appendChild(danmuContainer);
+    }
     
+    // 重新设置弹幕区域大小
+    if (danmuContainer) {
+        // 移除所有尺寸类
+        danmuContainer.classList.remove('danmu-fullscreen', 'danmu-halfscreen', 'danmu-thirdscreen');
+        
+        // 根据当前激活的按钮设置尺寸
+        if (halfScreenDanmuBtn.classList.contains('active')) {
+            danmuContainer.classList.add('danmu-halfscreen');
+        } else if (thirdScreenDanmuBtn.classList.contains('active')) {
+            danmuContainer.classList.add('danmu-thirdscreen');
+        } else {
+            danmuContainer.classList.add('danmu-fullscreen');
+        }
+        
+        // 强制重排
+        setTimeout(() => {
+            if (danmaku) {
+                danmaku.resize();
+            }
+        }, 100);
+    }
 }
+
 function extractTaskId(fullTaskId) {
     // 从 "1968471452816072704[抖音]" 中提取 "1968471452816072704"
     return fullTaskId.replace(/\[.*?\]/g, '').trim();
 }
+
 let isBarrageFlyWSConnect = false;
 // 设置事件监听
 function setupEventListeners() {
@@ -149,35 +206,65 @@ function setupEventListeners() {
         console.error('控件元素未找到');
         return;
     }
+    // 打开/关闭设置按钮
+    if (adminPasswordSetBtn) {
+        adminPasswordSetBtn.addEventListener('click', () => {
+            // 如果设置已经打开，直接关闭
+            if (adminSettingsOpen) {
+                toggleAdminSettings(false);
+                return;
+            }
+            
+            // 如果设置未打开，需要验证密码
+            const password = adminPasswordInput ? adminPasswordInput.value.trim() : '';
+            if (!password) {
+                addSystemMessage('请输入管理员密码');
+                return;
+            }
+            
+            // 发送密码验证请求
+            socket.emit('verify-admin-password', password);
+        });
+    }
     // 设置Barrage-Fly-WS通信地址
-     if (barrageflyWsSetBtn) {
+    if (barrageflyWsSetBtn) {
         barrageflyWsSetBtn.addEventListener('click', () => {
-            if(!isBarrageFlyWSConnect){
+            const password = adminPasswordInput ? adminPasswordInput.value.trim() : '';
+            if (!password) {
+                addSystemMessage('请输入管理员密码');
+                return;
+            }
+            
+            if (!isBarrageFlyWSConnect) {
                 const input = barrageflyWsInput.value.trim();
                 if (!input) {
                     addSystemMessage('请输入BarrageFly-WS通信地址');
                     return;
                 }
-                if (!isValidWebSocketURL(input)){
+                if (!isValidWebSocketURL(input)) {
                     addSystemMessage('barrageFly-WebSocket通信地址格式无效，请使用 ws:// 或 wss:// 开头的地址');
                     return;
                 }
                 if (!socket) return;
-                socket.emit('set-barrage-fly-ws',input);
+                socket.emit('set-barrage-fly-ws', input, password);
                 isBarrageFlyWSConnect = true;
                 barrageflyWsSetBtn.textContent = '断开';
-            }else {
-                socket.emit('close-barrage-fly-ws');
+            } else {
+                socket.emit('close-barrage-fly-ws', password);
                 isBarrageFlyWSConnect = false;
                 barrageflyWsSetBtn.textContent = '连接';
             }
         });
     }
+    
     // 速度控制
     speedControl.addEventListener('input', (e) => {
         danmuSpeed = parseInt(e.target.value);
         if (speedValue) {
             speedValue.textContent = danmuSpeed;
+        }
+        if (danmaku) {
+            danmaku.speed = danmuSpeed;
         }
     });
     
@@ -187,22 +274,29 @@ function setupEventListeners() {
         if (opacityValue) {
             opacityValue.textContent = danmuOpacity.toFixed(1);
         }
+        if (danmaku) {
+            danmaku.opacity = danmuOpacity;
+        }
     });
     
     // 字体大小控制
     fontSizeControl.addEventListener('change', (e) => {
         fontSize = parseInt(e.target.value);
+        if (danmaku) {
+            danmaku.fontSize = fontSize;
+        }
     });
     
     // 清空弹幕
     if (clearBtn) {
         clearBtn.addEventListener('click', () => {
-            if (danmuContainer) {
+            if (danmaku) {
+                danmaku.clear();
+            } else if (danmuContainer) {
                 danmuContainer.innerHTML = '';
             }
             danmuCount = 0;
             updateCounters();
-            resetTracks();
             addSystemMessage('已清空所有弹幕');
         });
     }
@@ -231,18 +325,22 @@ function setupEventListeners() {
             addSystemMessage(danmuVisible ? '弹幕已显示' : '弹幕已隐藏');
         });
     }
+    
     // 在setupEventListeners函数中添加事件监听
     if (fullScreenDanmuBtn && halfScreenDanmuBtn && thirdScreenDanmuBtn) {
         fullScreenDanmuBtn.addEventListener('click', () => setDanmuArea('full'));
         halfScreenDanmuBtn.addEventListener('click', () => setDanmuArea('half'));
         thirdScreenDanmuBtn.addEventListener('click', () => setDanmuArea('third'));
     }
+    
     // 播放按钮
     if (playBtn) {
         playBtn.addEventListener('click', () => {
             const streamUrl = streamUrlInput ? streamUrlInput.value.trim() : '';
+            const password = adminPasswordInput ? adminPasswordInput.value.trim() : '';
+            
             if (streamUrl) {
-                playStream(streamUrl);
+                playStream(streamUrl, password);
                 // 同步按钮状态
                 if (playBtn && pauseBtn) {
                     playBtn.style.display = 'none';
@@ -267,34 +365,56 @@ function setupEventListeners() {
         });
     }
     
-    // 回车键播放
+    // 回车键播放 - 添加密码验证
     if (streamUrlInput) {
         streamUrlInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 const streamUrl = streamUrlInput.value.trim();
+                const password = adminPasswordInput ? adminPasswordInput.value.trim() : '';
+                
                 if (streamUrl) {
-                    playStream(streamUrl);
+                    playStream(streamUrl, password);
                 }
             }
         });
     }
+    
     // 添加任务ID
     if (addTaskBtn) {
-        addTaskBtn.addEventListener('click', addTaskIds);
+        addTaskBtn.addEventListener('click', () => {
+            const password = adminPasswordInput ? adminPasswordInput.value.trim() : '';
+            if (!password) {
+                addSystemMessage('请输入管理员密码');
+                return;
+            }
+            addTaskIds(password);
+        });
     }
     
     // 回车键添加任务ID
     if (taskIdInput) {
         taskIdInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                addTaskIds();
+                const password = adminPasswordInput ? adminPasswordInput.value.trim() : '';
+                if (!password) {
+                    addSystemMessage('请输入管理员密码');
+                    return;
+                }
+                addTaskIds(password);
             }
         });
     }
     
     // 删除选中的任务ID
     if (removeTaskBtn) {
-        removeTaskBtn.addEventListener('click', removeSelectedTaskIds);
+        removeTaskBtn.addEventListener('click', () => {
+            const password = adminPasswordInput ? adminPasswordInput.value.trim() : '';
+            if (!password) {
+                addSystemMessage('请输入管理员密码');
+                return;
+            }
+            removeSelectedTaskIds(password);
+        });
     }
     
     // 初始化任务ID列表
@@ -318,7 +438,7 @@ function addTaskIdToList(taskId) {
     taskIdList.appendChild(option);
 }
 
-function addTaskIds() {
+function addTaskIds(password) {
     if (!taskIdInput || !taskIdList) return;
     
     const input = taskIdInput.value.trim();
@@ -345,7 +465,7 @@ function addTaskIds() {
         if (!exists) {
             addTaskIdToList(taskId);
             config.currentTaskIds.push(taskId);
-            subscribeToTask(taskId); // 订阅新任务
+            subscribeToTask(taskId, password); // 订阅新任务
         }
     });
     
@@ -355,7 +475,7 @@ function addTaskIds() {
 }
 
 // 删除选中的任务ID（并取消订阅）
-function removeSelectedTaskIds() {
+function removeSelectedTaskIds(password) {
     if (!taskIdList) return;
     
     const selectedOptions = Array.from(taskIdList.selectedOptions);
@@ -370,7 +490,7 @@ function removeSelectedTaskIds() {
         const index = config.currentTaskIds.indexOf(taskId);
         if (index > -1) {
             config.currentTaskIds.splice(index, 1);
-            unsubscribeFromTask(taskId); // 取消订阅
+            unsubscribeFromTask(taskId, password); // 取消订阅
         }
         option.remove();
     });
@@ -379,7 +499,7 @@ function removeSelectedTaskIds() {
 }
 
 // 订阅任务
-function subscribeToTask(fullTaskId) {
+function subscribeToTask(fullTaskId, password) {
     if (!socket) return;
     
     // 提取纯任务ID用于WebSocket通信
@@ -388,12 +508,13 @@ function subscribeToTask(fullTaskId) {
     socket.emit('subscribe', {
         taskIds: [fullTaskId], // 发送带备注的完整ID给server.js
         pureTaskIds: [pureTaskId], // 同时发送纯ID用于WebSocket通信
-        cmd: 'SUBSCRIBE'
+        cmd: 'SUBSCRIBE',
+        password: password // 添加密码参数
     });
 }
 
 // 取消订阅任务
-function unsubscribeFromTask(fullTaskId) {
+function unsubscribeFromTask(fullTaskId, password) {
     if (!socket) return;
     
     // 提取纯任务ID用于WebSocket通信
@@ -402,12 +523,13 @@ function unsubscribeFromTask(fullTaskId) {
     socket.emit('unsubscribe', {
         taskIds: [fullTaskId], // 发送带备注的完整ID给server.js
         pureTaskIds: [pureTaskId], // 同时发送纯ID用于WebSocket通信
-        cmd: 'UNSUBSCRIBE'
+        cmd: 'UNSUBSCRIBE',
+        password: password // 添加密码参数
     });
 }
 // 播放直播流
-function playStream(streamUrl) {
-    socket.emit('set-stream-url',streamUrl);
+function playStream(streamUrl, password) {
+    socket.emit('set-stream-url', streamUrl, password);
     if (!dp) {
         addSystemMessage('播放器未初始化');
         return;
@@ -432,7 +554,7 @@ function playStream(streamUrl) {
         addSystemMessage(`播放失败: ${error.message}`);
     }
 }
-// 设置弹幕显示区域的函数
+// 修改 setDanmuArea 函数
 function setDanmuArea(mode) {
     if (!danmuContainer) return;
     
@@ -448,40 +570,70 @@ function setDanmuArea(mode) {
         case 'half':
             danmuContainer.classList.add('danmu-halfscreen');
             halfScreenDanmuBtn.classList.add('active');
-            danmuTracks.total = 4; // 半屏减少轨道数量
             addSystemMessage('弹幕显示区域设置为半屏');
             break;
         case 'third':
             danmuContainer.classList.add('danmu-thirdscreen');
             thirdScreenDanmuBtn.classList.add('active');
-            danmuTracks.total = 3; // 1/3屏进一步减少轨道数量
             addSystemMessage('弹幕显示区域设置为1/3屏');
             break;
         default: // full
             danmuContainer.classList.add('danmu-fullscreen');
             fullScreenDanmuBtn.classList.add('active');
-            danmuTracks.total = 8; // 全屏恢复轨道数量
             addSystemMessage('弹幕显示区域设置为全屏');
     }
     
-    // 重置轨道状态
-    danmuTracks.occupied = new Array(danmuTracks.total).fill(false);
-    danmuTracks.lastUseTime = new Array(danmuTracks.total).fill(0);
-    updateTrackCount();
+    // 重新初始化 Danmaku 实例以适应新的尺寸
+    if (danmaku) {
+        setTimeout(() => {
+            danmaku.resize();
+        }, 100);
+    }
     
     // 清空当前弹幕
-    if (danmuContainer) {
+    if (danmaku) {
+        danmaku.clear();
+    } else if (danmuContainer) {
         danmuContainer.innerHTML = '';
+    }
+}
+// 添加显示/隐藏设置函数
+function toggleAdminSettings(show) {
+    if (!adminSettings || adminSettings.length === 0) return;
+    
+    adminSettings.forEach(setting => {
+        if (show) {
+            setting.style.display = 'block';
+        } else {
+            setting.style.display = 'none';
+        }
+    });
+    
+    if (show) {
+        adminPasswordSetBtn.textContent = '关闭设置';
+        addSystemMessage('管理员密码验证成功，设置已打开');
+        adminSettingsOpen = true;
+    } else {
+        adminPasswordSetBtn.textContent = '打开设置';
+        addSystemMessage('设置已关闭');
+        adminSettingsOpen = false;
     }
 }
 // 设置Socket.io监听
 function setupSocketListeners() {
     if (!socket) return;
-    
+    // 监听密码验证结果
+    socket.on('admin-password-result', (result) => {
+        if (result.success) {
+            toggleAdminSettings(true); // 打开设置
+        } else {
+            addSystemMessage('管理员密码错误');
+        }
+    });
     socket.on('connect', () => {
         if (connectionStatus) {
-            // connectionStatus.textContent = '已连接';
-            // connectionStatus.style.color = '#4ade80';
+            forwarderConnectionStatus.textContent = '已连接';
+            forwarderConnectionStatus.style.color = '#4ade80';
             socket.emit('get-ws-url');
             socket.emit('get-stream-url');
         }
@@ -496,10 +648,12 @@ function setupSocketListeners() {
     });
     socket.on('disconnect', () => {
         if (connectionStatus) {
-            // connectionStatus.textContent = '已断开';
-            // connectionStatus.style.color = '#f87171';
+            forwarderConnectionStatus.textContent = '已断开';
+            forwarderConnectionStatus.style.color = '#f87171';
+            connectionStatus.textContent = '未知';
+            connectionStatus.style.color = '#f87171';
         }
-        addSystemMessage('与服务器断开连接');
+        addSystemMessage('与转发服务器断开连接');
     });
     
     socket.on('status', (status) => {
@@ -532,9 +686,12 @@ function setupSocketListeners() {
         barrageflyWsInput.value = barrageFlyWSUrl;
         if(isBarrageFlyWSConnect){
             barrageflyWsSetBtn.textContent = '断开';
-
+            connectionStatus.textContent = '已连接'
+            connectionStatus.style.color = '#4ade80';
         }else{
             barrageflyWsSetBtn.textContent = '连接';
+            connectionStatus.textContent = '已断开'
+            connectionStatus.style.color = '#f87171';
         }
     });
     
@@ -546,7 +703,11 @@ function setupSocketListeners() {
         console.error('Socket错误:', error);
         addSystemMessage('连接发生错误');
     });
+    socket.on('close-barrage-fly-ws', () => {
+        barrageflyWsSetBtn.textContent = '断开';
+    });
 }
+
 function updateSubscriptionList(taskIds) {
     if (!taskIdList) return;
     
@@ -596,136 +757,78 @@ function processMessage(data) {
             addSystemMessage(`未知消息类型: ${data.type}`);
     }
 }
-
-// 获取可用轨道
-function getAvailableTrack() {
-    const now = Date.now();
-    let availableTrack = -1;
-    
-    // 首先尝试找空闲轨道
-    for (let i = 0; i < danmuTracks.occupied.length; i++) {
-        if (!danmuTracks.occupied[i]) {
-            availableTrack = i;
-            break;
-        }
-    }
-    
-    // 如果没有空闲轨道，找最久未使用的轨道
-    if (availableTrack === -1) {
-        let oldestTime = Infinity;
-        for (let i = 0; i < danmuTracks.lastUseTime.length; i++) {
-            if (danmuTracks.lastUseTime[i] < oldestTime) {
-                oldestTime = danmuTracks.lastUseTime[i];
-                availableTrack = i;
-            }
-        }
-    }
-    
-    if (availableTrack !== -1) {
-        danmuTracks.occupied[availableTrack] = true;
-        danmuTracks.lastUseTime[availableTrack] = now;
-        updateTrackCount();
-    }
-    
-    return availableTrack;
-}
-
-// 释放轨道
-function releaseTrack(track) {
-    if (track >= 0 && track < danmuTracks.occupied.length) {
-        danmuTracks.occupied[track] = false;
-        updateTrackCount();
-    }
-}
-
-// 重置所有轨道
-function resetTracks() {
-    danmuTracks.occupied.fill(false);
-    updateTrackCount();
-}
-
-// 更新轨道计数显示
-function updateTrackCount() {
-    if (!trackCountElement) return;
-    
-    const occupiedCount = danmuTracks.occupied.filter(occupied => occupied).length;
-    trackCountElement.textContent = `${occupiedCount}/${danmuTracks.total}`;
-}
-
 // 显示弹幕
 function displayDanmu(roomId, platform, msgDto) {
-    if (!danmuVisible || !danmuContainer) return;
+    if (!danmuVisible) return;
     
-    const track = getAvailableTrack();
-    if (track === -1) return; // 没有可用轨道
-    
-    const danmuElement = document.createElement('div');
-    danmuElement.className = 'danmu danmu-danmu';
-    danmuElement.style.fontSize = `${fontSize}px`;
-    danmuElement.style.opacity = danmuOpacity;
+    danmuCount++;
+    updateCounters();
     
     // 获取平台标签
     const platformLabel = getPlatformLabel(platform);
-    
-    // 构建弹幕内容
-    let content = '';
-    
-    // 添加平台标签
-    if (platformLabel) {
-        content += `<span class="platform-label" style="background: ${platformLabel.color}">${platformLabel.text}</span> `;
-    }
-    
-    // 添加徽章
-    if (msgDto.badgeLevel && msgDto.badgeLevel !== 0) {
-        content += `<span class="badge">${msgDto.badgeLevel}${msgDto.badgeName}</span> `;
-    }
-    
-    // 添加用户名和内容
-    content += `<strong>${msgDto.username}</strong>: ${msgDto.content}`;
-    
-    danmuElement.innerHTML = content;
-    
-    // 设置轨道位置
-    const trackHeight = danmuContainer.clientHeight / danmuTracks.total;
-    const top = track * trackHeight + (trackHeight - fontSize - 8) / 2;
-    danmuElement.style.top = `${Math.max(0, top)}px`;
-    
-    // 添加到容器
-    danmuContainer.appendChild(danmuElement);
-    
-    // 获取弹幕宽度
-    const danmuWidth = danmuElement.offsetWidth;
-    const containerWidth = danmuContainer.clientWidth;
-    
-    // 设置初始位置（最右侧）
-    danmuElement.style.left = `${containerWidth}px`;
-    
-    // 计算动画时间（秒）
-    const duration = (containerWidth + danmuWidth) / danmuSpeed;
-    
-    // 使用requestAnimationFrame实现平滑动画
-    const startTime = Date.now();
-    
-    function animate() {
-        const currentTime = Date.now();
-        const elapsed = (currentTime - startTime) / 1000;
-        const progress = Math.min(1, elapsed / duration);
+    // 使用Danmaku库显示弹幕
+    if (danmaku) {
+        // 创建外层容器（负责圆角和背景）
+        const containerElement = document.createElement('div');
+        containerElement.style.cssText = `
+            display: inline-block;
+            border-radius: 50px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            overflow: hidden;
+        `;
         
-        if (progress < 1) {
-            const currentLeft = containerWidth - (containerWidth + danmuWidth) * progress;
-            danmuElement.style.left = `${currentLeft}px`;
-            requestAnimationFrame(animate);
-        } else {
-            // 动画结束
-            if (danmuElement.parentNode) {
-                danmuElement.parentNode.removeChild(danmuElement);
-            }
-            releaseTrack(track);
+        // 创建内层内容容器（负责边框和布局）
+        const danmuElement = document.createElement('div');
+        danmuElement.style.cssText = `
+            font-size: ${fontSize}px;
+            opacity: ${danmuOpacity};
+            color: #ffffff;
+            padding: 4px 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        `;
+        
+        // 添加平台标签
+        if (platformLabel) {
+            const platformSpan = document.createElement('span');
+            platformSpan.className = 'platform-label';
+            platformSpan.style.background = platformLabel.color;
+            platformSpan.textContent = platformLabel.text;
+            danmuElement.appendChild(platformSpan);
         }
+        
+        // 添加徽章（如果有）
+        // if (msgDto.badgeLevel && msgDto.badgeLevel !== 0) {
+        //     const badgeSpan = document.createElement('span');
+        //     badgeSpan.className = 'badge';
+        //     badgeSpan.textContent = `${msgDto.badgeLevel}${msgDto.badgeName}`;
+        //     //danmuElement.appendChild(badgeSpan);
+        // }
+        
+        // // 添加用户名
+        // const usernameSpan = document.createElement('span');
+        // usernameSpan.className = 'username';
+        // usernameSpan.textContent = msgDto.username + ': ';
+        // usernameSpan.style.fontWeight = 'bold';
+        // usernameSpan.style.color = '#ffffff';
+        // danmuElement.appendChild(usernameSpan);
+        
+        // 添加内容
+        const contentSpan = document.createElement('span');
+        contentSpan.className = 'content';
+        contentSpan.textContent = msgDto.content;
+        contentSpan.style.color = '#ffffff';
+        danmuElement.appendChild(contentSpan);
+        // 组装元素
+        containerElement.appendChild(danmuElement);
+        // 使用自定义渲染
+        danmaku.emit({
+            text: '',
+            render: () => containerElement
+        });
     }
-    
-    // 开始动画
-    requestAnimationFrame(animate);
 }
 
 // 根据平台获取标签信息和颜色
@@ -775,15 +878,7 @@ function getPlatformLabel(platform) {
 
 // 显示礼物
 function displayGift(roomId, platform, msgDto) {
-    if (!danmuVisible || !danmuContainer) return;
-    
-    const track = getAvailableTrack();
-    if (track === -1) return;
-    
-    const giftElement = document.createElement('div');
-    giftElement.className = 'danmu danmu-gift';
-    giftElement.style.fontSize = `${fontSize}px`;
-    giftElement.style.opacity = danmuOpacity;
+    if (!danmuVisible) return;
     
     // 获取平台标签
     const platformLabel = getPlatformLabel(platform);
@@ -804,49 +899,60 @@ function displayGift(roomId, platform, msgDto) {
     
     content += `<strong>${msgDto.username}</strong> ${msgDto.data?.action || "赠送"} <span style="color: #ffcc00">${msgDto.giftName}</span> × ${msgDto.giftCount}`;
     
-    giftElement.innerHTML = content;
-    
-    // 设置轨道位置
-    const trackHeight = danmuContainer.clientHeight / danmuTracks.total;
-    const top = track * trackHeight + (trackHeight - fontSize - 8) / 2;
-    giftElement.style.top = `${Math.max(0, top)}px`;
-    
-    // 添加到容器
-    danmuContainer.appendChild(giftElement);
-    
-    // 获取弹幕宽度
-    const danmuWidth = giftElement.offsetWidth;
-    const containerWidth = danmuContainer.clientWidth;
-    
-    // 设置初始位置（最右侧）
-    giftElement.style.left = `${containerWidth}px`;
-    
-    // 计算动画时间（秒）- 礼物消息快一些
-    const duration = (containerWidth + danmuWidth) / (danmuSpeed * 1.2);
-    
-    // 使用requestAnimationFrame实现平滑动画
-    const startTime = Date.now();
-    
-    function animate() {
-        const currentTime = Date.now();
-        const elapsed = (currentTime - startTime) / 1000;
-        const progress = Math.min(1, elapsed / duration);
-        
-        if (progress < 1) {
-            const currentLeft = containerWidth - (containerWidth + danmuWidth) * progress;
-            giftElement.style.left = `${currentLeft}px`;
-            requestAnimationFrame(animate);
-        } else {
-            // 动画结束
-            if (giftElement.parentNode) {
-                giftElement.parentNode.removeChild(giftElement);
+    // 使用Danmaku库显示礼物弹幕
+    if (danmaku) {
+        danmaku.emit({
+            text: content,
+            style: {
+                fontSize: `${fontSize}px`,
+                opacity: danmuOpacity,
+                color: '#ffcc00',
+                borderLeft: '3px solid #ff8a00',
+                padding: '4px 12px',
+                borderRadius: '16px',
+                background: 'rgba(255, 138, 0, 0.3)',
+                backdropFilter: 'blur(4px)'
             }
-            releaseTrack(track);
+        });
+    } else {
+        // 备用模式：手动创建礼物弹幕元素
+        const giftElement = document.createElement('div');
+        giftElement.className = 'danmu danmu-gift';
+        giftElement.style.fontSize = `${fontSize}px`;
+        giftElement.style.opacity = danmuOpacity;
+        giftElement.innerHTML = content;
+        
+        if (danmuContainer) {
+            danmuContainer.appendChild(giftElement);
+            
+            // 简单的动画实现
+            const danmuWidth = giftElement.offsetWidth;
+            const containerWidth = danmuContainer.clientWidth;
+            giftElement.style.left = `${containerWidth}px`;
+            
+            const duration = (containerWidth + danmuWidth) / (danmuSpeed * 1.2);
+            
+            const startTime = Date.now();
+            
+            function animate() {
+                const currentTime = Date.now();
+                const elapsed = (currentTime - startTime) / 1000;
+                const progress = Math.min(1, elapsed / duration);
+                
+                if (progress < 1) {
+                    const currentLeft = containerWidth - (containerWidth + danmuWidth) * progress;
+                    giftElement.style.left = `${currentLeft}px`;
+                    requestAnimationFrame(animate);
+                } else {
+                    if (giftElement.parentNode) {
+                        giftElement.parentNode.removeChild(giftElement);
+                    }
+                }
+            }
+            
+            requestAnimationFrame(animate);
         }
     }
-    
-    // 开始动画
-    requestAnimationFrame(animate);
 }
 // 添加消息到日志
 function addMessageLog(roomId, platform, type, msgDto) {
