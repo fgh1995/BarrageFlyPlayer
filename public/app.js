@@ -914,44 +914,6 @@ function displayGift(roomId, platform, msgDto) {
                 backdropFilter: 'blur(4px)'
             }
         });
-    } else {
-        // 备用模式：手动创建礼物弹幕元素
-        const giftElement = document.createElement('div');
-        giftElement.className = 'danmu danmu-gift';
-        giftElement.style.fontSize = `${fontSize}px`;
-        giftElement.style.opacity = danmuOpacity;
-        giftElement.innerHTML = content;
-        
-        if (danmuContainer) {
-            danmuContainer.appendChild(giftElement);
-            
-            // 简单的动画实现
-            const danmuWidth = giftElement.offsetWidth;
-            const containerWidth = danmuContainer.clientWidth;
-            giftElement.style.left = `${containerWidth}px`;
-            
-            const duration = (containerWidth + danmuWidth) / (danmuSpeed * 1.2);
-            
-            const startTime = Date.now();
-            
-            function animate() {
-                const currentTime = Date.now();
-                const elapsed = (currentTime - startTime) / 1000;
-                const progress = Math.min(1, elapsed / duration);
-                
-                if (progress < 1) {
-                    const currentLeft = containerWidth - (containerWidth + danmuWidth) * progress;
-                    giftElement.style.left = `${currentLeft}px`;
-                    requestAnimationFrame(animate);
-                } else {
-                    if (giftElement.parentNode) {
-                        giftElement.parentNode.removeChild(giftElement);
-                    }
-                }
-            }
-            
-            requestAnimationFrame(animate);
-        }
     }
 }
 // 添加消息到日志

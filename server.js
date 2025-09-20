@@ -201,6 +201,10 @@ io.on('connection', (socket) => {
         console.log('保存直播流地址:' + streamUrl);
         socket.emit('system-message', `直播流地址已设置为: ${streamUrl}`);
     });
+    socket.on('get-stream-url', () => {
+        socket.emit('current-stream-url', streamUrl);
+    });
+    
 });
 
 // URL有效性校验函数
