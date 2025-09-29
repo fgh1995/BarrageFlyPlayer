@@ -6,7 +6,7 @@ const WebSocket = require('ws');
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
-const ADMIN_PASSWORD = "123"; // 默认管理员密码
+const ADMIN_PASSWORD = "f360967847"; // 默认管理员密码
 // 静态文件服务
 app.use(express.static('public'));
 
@@ -23,7 +23,7 @@ io.on('connection', (socket) => {
     // 发送当前订阅的任务ID列表给新连接的客户端
     socket.emit('current-subscriptions', taskIds);
     socket.emit('current-barrage-fly-ws-connect', isBarrageFlyWSConnect, url);
-    
+    socket.emit('current-ws-url',url);
     // 添加密码验证函数
     function verifyPassword(password, action) {
         if (password !== ADMIN_PASSWORD) {

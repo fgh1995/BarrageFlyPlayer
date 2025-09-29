@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>让子弹飞播放器-弹幕聚合播放器</title>
+    <title>让子弹飞播放器-多视角弹幕聚合播放器</title>
     <link rel="stylesheet" href="style.css">
     <!-- 引入 DPlayer 播放器 -->
     <link href="https://cdn.jsdelivr.net/npm/dplayer/dist/DPlayer.min.css" rel="stylesheet">
@@ -18,143 +18,200 @@
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>让弹幕飞播放器-弹幕聚合播放器</h1>
-            <p class="subtitle">一个基于[Barrage Fly-让弹幕飞]的项目，将几大平台的弹幕聚合到一个视频播放器上，本项目使用AI生成，如有BUG请自行解决。</p>
+        <header class="app-header">
+            <h1>让弹幕飞播放器 - 多视角弹幕聚合</h1>
+            <p class="subtitle">支持多视角同步观看，聚合各大平台弹幕，提供沉浸式直播体验</p>
         </header>
         
-        <div class="dashboard">
-            <div class="stats-container">
-                <div class="stats">
-                    <div class="stat-card">
-                        <div class="stat-label">转发器连接状态</div>
-                        <div class="stat-value" id="forwarder-connection-status">未知</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">BarrageFly-连接状态</div>
-                        <div class="stat-value" id="connection-status">未知</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">弹幕数量</div>
-                        <div class="stat-value" id="danmu-count">0</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">房间数量</div>
-                        <div class="stat-value" id="room-count">4</div>
-                    </div>
-                </div>
-                
-                <!-- 视频播放器容器 -->
-                <div class="video-container">
-                    <div id="dplayer"></div>
-                    <!-- 弹幕容器放在视频上方 -->
-                    <div class="danmu-container" id="danmu-container"></div>
-                </div>
-            </div>
-            
-            <div class="controls">
+        <!-- 主控制面板 -->
+        <section class="control-section">
+            <h2 class="section-title">控制面板</h2>
+            <div class="control-panel">
                 <div class="control-group">
                     <label for="admin-password">管理员密码</label>
-                    <input type="text" id="admin-password-input" placeholder="请输入管理员密码" value="f36096">
+                    <input type="password" id="admin-password-input" placeholder="请输入管理员密码" value="f36096">
                     <button id="admin-password-set-btn">打开设置</button>
                 </div>
                 
-                <!-- BarrageFly-WS通信地址设置 -->
                 <div class="control-group admin-setting" id="barragefly-ws-group">
                     <label for="barragefly-ws-address-input">BarrageFly-WS通信地址</label>
-                    <div class="task-id-input-group">
-                        <input type="text" id="barragefly-ws-address-input" placeholder="请输入BarrageFly-WS通信地址">
-                        <button id="barragefly-ws-address-set-btn">设置</button>
+                    <div class="input-with-button">
+                        <input type="text" id="barragefly-ws-address-input" placeholder="ws://localhost:9898">
+                        <button id="barragefly-ws-address-set-btn">连接</button>
                     </div>
                 </div>
                 
-                <!-- 任务ID管理 -->
-                <div class="control-group admin-setting" id="task-id-group">
-                    <label for="task-id-input">任务ID管理（支持0000[备注]格式）</label>
-                    <div class="task-id-input-group">
-                        <input type="text" id="task-id-input" placeholder="输入任务ID (用逗号分隔多个ID)">
-                        <button id="add-task-btn">添加</button>
+                <div class="control-group">
+                    <label for="stream-url">主播放器直播流地址</label>
+                    <input type="text" id="stream-url" placeholder="输入直播流地址" value="">
+                    <div class="button-group">
+                        <button id="play-btn" class="btn-primary">播放</button>
+                        <button id="pause-btn" class="btn-secondary" style="display:none;">暂停</button>
                     </div>
-                    <div class="task-id-list-container">
-                        <select multiple id="task-id-list" size="4"></select>
-                        <button id="remove-task-btn">删除选中</button>
-                    </div>
-                </div>
-                
-                <!-- 直播流地址 -->
-                <div class="control-group">
-                    <label for="stream-url">直播流地址</label>
-                    <input type="text" id="stream-url" placeholder="输入直播流地址 (m3u8/mp4/flv/rtmp等)" value="">
-                </div>
-                <div class="control-group">
-                    <button id="play-btn">播放</button>
-                    <button id="pause-btn" style="display:none;">暂停</button>
-                </div>
-                <div class="control-group">
-                    <label>弹幕显示区域</label>
-                    <div style="display: flex; gap: 5px;">
-                        <button id="full-screen-danmu" class="area-btn active">全屏</button>
-                        <button id="half-screen-danmu" class="area-btn">半屏</button>
-                        <button id="third-screen-danmu" class="area-btn">1/3屏</button>
-                    </div>
-                </div>
-                <div class="control-group">
-                    <label for="speed-control">弹幕速度 (<span id="speed-value">150</span>px/s)</label>
-                    <input type="range" id="speed-control" min="50" max="500" value="150" step="10">
-                </div>
-                <div class="control-group">
-                    <label for="opacity-control">弹幕透明度 (<span id="opacity-value">0.8</span>)</label>
-                    <input type="range" id="opacity-control" min="0.1" max="1" value="0.8" step="0.1">
-                </div>
-                <div class="control-group">
-                    <label for="font-size-control">字体大小 (<span id="font-size-value">20</span>px)</label>
-                    <input type="range" id="font-size-control" min="12" max="80" value="40" step="1">
-                </div>
-                <div class="control-group">
-                    <button id="clear-btn">清空弹幕</button>
-                    <button id="toggle-danmu-btn">隐藏弹幕</button>
                 </div>
             </div>
-        </div>
-        
-        <div class="message-log-container">
-            <div class="message-log-header">
-                <span>消息日志</span>
-                <button id="clear-log-btn">清空日志</button>
+        </section>
+
+        <!-- 状态指示器 -->
+        <section class="status-section">
+            <h2 class="section-title">系统状态</h2>
+            <div class="status-indicators">
+                <div class="status-item">
+                    <span class="status-label">转发器:</span>
+                    <span class="status-value" id="forwarder-connection-status">未连接</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">弹幕服务:</span>
+                    <span class="status-value" id="connection-status">未连接</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">弹幕数:</span>
+                    <span class="status-value" id="danmu-count">0</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">房间数:</span>
+                    <span class="status-value" id="room-count">0</span>
+                </div>
             </div>
-            <div class="message-log" id="message-log">
-                <div class="message message-system">系统准备就绪，等待连接WebSocket服务器...</div>
+        </section>
+
+        <!-- 多视角播放器布局 -->
+        <section class="player-section">
+            <h2 class="section-title">多视角播放器</h2>
+            <div class="multi-view-layout">
+                <!-- 主播放器区域 -->
+                <div class="main-player-section">
+                    <div class="section-header">
+                        <h3>主视角</h3>
+                    </div>
+                    <div class="player-container main-player">
+                        <div class="player-content">
+                            <div id="dplayer"></div>
+                            <div class="danmu-container" id="danmu-container"></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 右侧副播放器区域 -->
+                <div class="side-players-section">
+                    <div class="section-header">
+                        <h3>其他视角</h3>
+                        <button id="add-side-player-btn" class="btn-small btn-primary">+ 添加</button>
+                    </div>
+                    <div class="side-players-container" id="side-videos-container">
+                        <!-- 动态添加的副播放器 -->
+                    </div>
+                </div>
             </div>
-        </div>
-        
-        <div class="status-bar">
-            <div>服务器: <span id="server-url">等待获取中...</span></div>
-            <div>任务ID: <span id="task-ids">等待获取中...</span></div>
-            <div>版本: <span id="version-info">v1.1.2</span></div>
-        </div>
-        <!-- 底部项目链接 -->
-        <div class="footer-links">
-            <div class="footer-title">相关项目</div>
-            <div class="project-cards">
-                <a href="https://github.com/OrdinaryRoad-Project/ordinaryroad-barrage-fly" target="_blank" class="project-card">
-                    <i class="fab fa-github"></i>
-                    <div class="project-info">
-                        <div class="project-name">Barrage Fly - 让弹幕飞</div>
-                        <div class="project-url">https://github.com/OrdinaryRoad-Project/ordinaryroad-barrage-fly</div>
+        </section>
+
+        <!-- 弹幕和任务管理 -->
+        <section class="management-section">
+            <h2 class="section-title">控制中心</h2>
+            <div class="management-panel">
+                <div class="panel-section">
+                    <div class="section-header">
+                        <h3>弹幕控制</h3>
                     </div>
-                </a>
-                <a href="https://github.com/fgh1995/Barrage-Fly-Player" target="_blank" class="project-card">
-                    <i class="fab fa-github"></i>
-                    <div class="project-info">
-                        <div class="project-name">Barrage Fly Player - 让弹幕飞播放器</div>
-                        <div class="project-url">https://github.com/fgh1995/Barrage-Fly-Player</div>
+                    <div class="control-grid">
+                        <div class="control-item">
+                            <label>显示区域</label>
+                            <div class="button-group">
+                                <button id="full-screen-danmu" class="btn-small active">全屏</button>
+                                <button id="half-screen-danmu" class="btn-small">半屏</button>
+                                <button id="third-screen-danmu" class="btn-small">1/3屏</button>
+                            </div>
+                        </div>
+                        <div class="control-item">
+                            <label>速度 (<span id="speed-value">150</span>px/s)</label>
+                            <input type="range" id="speed-control" min="50" max="500" value="150" step="10">
+                        </div>
+                        <div class="control-item">
+                            <label>透明度 (<span id="opacity-value">0.8</span>)</label>
+                            <input type="range" id="opacity-control" min="0.1" max="1" value="0.8" step="0.1">
+                        </div>
+                        <div class="control-item">
+                            <label>字体 (<span id="font-size-value">20</span>px)</label>
+                            <input type="range" id="font-size-control" min="12" max="40" value="20" step="1">
+                        </div>
+                        <div class="control-item">
+                            <button id="toggle-danmu-btn" class="btn-secondary">隐藏弹幕</button>
+                            <button id="clear-btn" class="btn-warning">清空弹幕</button>
+                        </div>
                     </div>
-                </a>
+                </div>
+
+                <div class="panel-section admin-setting">
+                    <div class="section-header">
+                        <h3>任务管理</h3>
+                    </div>
+                    <div class="task-management">
+                        <label>任务ID (格式: id[roomId][备注])</label>
+                        <div class="input-with-button">
+                            <input type="text" id="task-id-input" placeholder="1234[6][梁海鹏]">
+                            <button id="add-task-btn" class="btn-primary">添加</button>
+                        </div>
+                        <div class="task-list-container">
+                            <select multiple id="task-id-list" size="4"></select>
+                            <button id="remove-task-btn" class="btn-warning">删除选中</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 消息日志 -->
+        <section class="log-section">
+            <h2 class="section-title">消息日志</h2>
+            <div class="message-log-panel">
+                <div class="panel-header">
+                    <h3>实时消息</h3>
+                    <button id="clear-log-btn" class="btn-small btn-warning">清空日志</button>
+                </div>
+                <div class="message-log" id="message-log">
+                    <div class="message message-system">系统准备就绪，等待连接...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 底部状态栏 -->
+        <footer class="footer-bar">
+            <div class="footer-info">
+                <span>服务器: <span id="server-url">未设置</span></span>
+                <span>任务: <span id="task-ids">无</span></span>
+                <span>版本: v1.3.7</span>
+            </div>
+            <div class="footer-links">
+                <a href="https://github.com/OrdinaryRoad-Project/ordinaryroad-barrage-fly" target="_blank">Barrage Fly</a>
+                <a href="https://github.com/fgh1995/Barrage-Fly-Player" target="_blank">播放器项目</a>
+            </div>
+        </footer>
+    </div>
+
+    <!-- 添加播放器模态框 -->
+    <div id="add-player-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>添加其他视角</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="player-remark">视角备注</label>
+                    <input type="text" id="player-remark" placeholder="例如: 主播A视角">
+                </div>
+                <div class="form-group">
+                    <label for="player-stream-url">直播流地址</label>
+                    <input type="text" id="player-stream-url" placeholder="输入直播流地址">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="confirm-add-player" class="btn-primary">确认添加</button>
+                <button id="cancel-add-player" class="btn-secondary">取消</button>
             </div>
         </div>
     </div>
-    
-    <!-- 引入 DPlayer 及其依赖 -->
+
+    <!-- 引入依赖 -->
     <script src="https://cdn.jsdelivr.net/npm/flv.js/dist/flv.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js/dist/hls.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dplayer/dist/DPlayer.min.js"></script>

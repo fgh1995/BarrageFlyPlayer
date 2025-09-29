@@ -1,7 +1,8 @@
 // 配置信息
 const config = {
     url: "ws://localhost:9898",
-    currentTaskIds: [] // 当前管理的任务ID
+    currentTaskIds: [], // 当前管理的任务ID
+    remarkMap: {} // 存储 roomId -> 备注 的映射关系
 };
 
 // 状态变量
@@ -15,8 +16,13 @@ let adminSettingsOpen = false;
 // Danmaku 实例
 let danmaku = null;
 let adminPassword = "";
+// 播放器管理变量
+let sidePlayers = []; // 右侧副播放器数组
+let bottomPlayers = []; // 底部副播放器数组
+const MAX_SIDE_PLAYERS = 6; // 右侧最大播放器数量
+const MAX_BOTTOM_PLAYERS = 4; // 底部最大播放器数量
 // DOM元素
-let danmuContainer, messageLog, connectionStatus, danmuCountElement, roomCountElement, serverUrlElement, streamUrlElement, barrageflyWsInput, barrageflyWsSetBtn,adminSettings,adminPasswordSetBtn;
+let danmuContainer, messageLog, connectionStatus, danmuCountElement, roomCountElement, serverUrlElement, barrageflyWsInput, barrageflyWsSetBtn,adminSettings,adminPasswordSetBtn;
 let speedControl, speedValue, opacityControl, opacityValue, fontSizeControl,fontSizeValue;
 let clearBtn, clearLogBtn, toggleDanmuBtn, playBtn, pauseBtn, streamUrlInput, trackCountElement;
 
@@ -34,6 +40,12 @@ function init() {
     initializeVideoPlayer();
     initializeDanmaku(); // 初始化弹幕库
     toggleAdminSettings(false);    // 初始化时隐藏管理员设置
+    initializeMultiPlayers();
+}
+// 初始化多播放器功能
+function initializeMultiPlayers() {
+    setupPlayerEventListeners();
+    loadPlayersFromStorage();
 }
 
 // 初始化Danmaku弹幕库
@@ -60,42 +72,275 @@ function initializeDanmaku() {
 
 // 初始化DOM元素
 function initializeDOMElements() {
+    // 播放器相关
     danmuContainer = document.getElementById('danmu-container');
     messageLog = document.getElementById('message-log');
+    
+    // 状态指示器
     connectionStatus = document.getElementById('connection-status');
     forwarderConnectionStatus = document.getElementById('forwarder-connection-status');
     danmuCountElement = document.getElementById('danmu-count');
     roomCountElement = document.getElementById('room-count');
+    
+    // 控制元素
     speedControl = document.getElementById('speed-control');
     speedValue = document.getElementById('speed-value');
     opacityControl = document.getElementById('opacity-control');
     opacityValue = document.getElementById('opacity-value');
     fontSizeControl = document.getElementById('font-size-control');
     fontSizeValue = document.getElementById('font-size-value');
+    
+    // 按钮
     clearBtn = document.getElementById('clear-btn');
     clearLogBtn = document.getElementById('clear-log-btn');
     toggleDanmuBtn = document.getElementById('toggle-danmu-btn');
     playBtn = document.getElementById('play-btn');
     pauseBtn = document.getElementById('pause-btn');
+    
+    // 输入框
     streamUrlInput = document.getElementById('stream-url');
-    trackCountElement = document.getElementById('track-count');
     taskIdInput = document.getElementById('task-id-input');
     taskIdList = document.getElementById('task-id-list');
+    
+    // 其他按钮
     addTaskBtn = document.getElementById('add-task-btn');
     removeTaskBtn = document.getElementById('remove-task-btn');
-    taskIdsElement = document.getElementById('task-ids');
     serverUrlElement = document.getElementById('server-url');
-    streamUrlElement = document.getElementById('stream-url');
+    
+    // 弹幕区域控制
     fullScreenDanmuBtn = document.getElementById('full-screen-danmu');
     halfScreenDanmuBtn = document.getElementById('half-screen-danmu');
     thirdScreenDanmuBtn = document.getElementById('third-screen-danmu');
+    
+    // WebSocket 设置
     barrageflyWsInput = document.getElementById('barragefly-ws-address-input');
     barrageflyWsSetBtn = document.getElementById('barragefly-ws-address-set-btn');
+    
+    // 管理员设置
     adminPasswordInput = document.getElementById('admin-password-input');
-    adminSettings = document.querySelectorAll('.admin-setting');
     adminPasswordSetBtn = document.getElementById('admin-password-set-btn');
+    adminSettings = document.querySelectorAll('.admin-setting');
+    
+    // 多播放器按钮
+    addSidePlayerBtn = document.getElementById('add-side-player-btn');
+    addBottomPlayerBtn = document.getElementById('add-bottom-player-btn');
+    
+    // 任务ID显示
+    taskIdsElement = document.getElementById('task-ids');
+}
+// 设置播放器相关事件监听
+function setupPlayerEventListeners() {
+    // 添加播放器按钮
+    const addSidePlayerBtn = document.getElementById('add-side-player-btn');
+    const addBottomPlayerBtn = document.getElementById('add-bottom-player-btn');
+    const confirmAddPlayerBtn = document.getElementById('confirm-add-player');
+    const cancelAddPlayerBtn = document.getElementById('cancel-add-player');
+    const closeModalBtn = document.querySelector('.close');
+    const modal = document.getElementById('add-player-modal');
+
+    if (addSidePlayerBtn) {
+        addSidePlayerBtn.addEventListener('click', () => showAddPlayerModal('side'));
+    }
+
+    if (addBottomPlayerBtn) {
+        addBottomPlayerBtn.addEventListener('click', () => showAddPlayerModal('bottom'));
+    }
+
+    if (confirmAddPlayerBtn) {
+        confirmAddPlayerBtn.addEventListener('click', addNewPlayer);
+    }
+
+    if (cancelAddPlayerBtn) {
+        cancelAddPlayerBtn.addEventListener('click', closeAddPlayerModal);
+    }
+
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', closeAddPlayerModal);
+    }
+
+    // 点击模态框外部关闭
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeAddPlayerModal();
+            }
+        });
+    }
 }
 
+// 显示添加播放器模态框
+function showAddPlayerModal(position) {
+    const modal = document.getElementById('add-player-modal');
+    position = 'side'
+    const positionSelect = document.getElementById('player-position');
+    
+    if (modal) {
+        modal.style.display = 'block';
+    }
+}
+
+// 关闭添加播放器模态框
+function closeAddPlayerModal() {
+    const modal = document.getElementById('add-player-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        // 清空输入框
+        document.getElementById('player-remark').value = '';
+        document.getElementById('player-stream-url').value = '';
+    }
+}
+
+// 添加新播放器
+function addNewPlayer() {
+    const remark = document.getElementById('player-remark').value.trim();
+    const streamUrl = document.getElementById('player-stream-url').value.trim();
+    position = 'side'
+    if (!streamUrl) {
+        addSystemMessage('请输入直播流地址');
+        return;
+    }
+
+    // 检查位置限制
+    if (position === 'side' && sidePlayers.length >= MAX_SIDE_PLAYERS) {
+        addSystemMessage(`右侧区域最多只能添加 ${MAX_SIDE_PLAYERS} 个播放器`);
+        return;
+    }
+    const playerId = 'player-' + Date.now();
+    const playerData = {
+        id: playerId,
+        remark: remark || `播放器${(position === 'side' ? sidePlayers.length : bottomPlayers.length) + 1}`,
+        streamUrl: streamUrl,
+        position: position
+    };
+
+    createPlayerElement(playerData);
+    closeAddPlayerModal();
+    addSystemMessage(`已添加播放器: ${playerData.remark}`);
+}
+
+// 创建播放器元素
+function createPlayerElement(playerData) {
+    const container = playerData.position === 'side' 
+        ? document.getElementById('side-videos-container')
+        : document.getElementById('bottom-videos-container');
+    
+    if (!container) return;
+
+    const playerElement = document.createElement('div');
+    playerElement.className = 'video-player-item';
+    playerElement.id = playerData.id;
+    playerElement.innerHTML = `
+        <div class="video-player-header">${playerData.remark}</div>
+        <div class="video-player-content" id="${playerData.id}-content"></div>
+        <div class="video-player-controls">
+            <button class="remove-player-btn" onclick="removePlayer('${playerData.id}')">×</button>
+        </div>
+    `;
+
+    container.appendChild(playerElement);
+    
+    // 初始化播放器
+    initializeSubPlayer(playerData);
+    
+    // 保存到对应数组和本地存储
+    if (playerData.position === 'side') {
+        sidePlayers.push(playerData);
+    } else {
+        bottomPlayers.push(playerData);
+    }
+    
+    savePlayersToStorage();
+}
+
+// 初始化副播放器
+function initializeSubPlayer(playerData) {
+    try {
+        const player = new DPlayer({
+            container: document.getElementById(`${playerData.id}-content`),
+            screenshot: true,
+            video: {
+                url: playerData.streamUrl,
+                type: 'auto'
+            },
+            // 设置静音
+            mutex: false, // 允许同时播放多个播放器，DPlayer默认是互斥的（mutex: true），所以需要设置为false
+            muted: true, // 静音
+        });
+        
+        // 播放视频
+        player.play().catch(error => {
+            console.error(`播放器 ${playerData.remark} 播放失败:`, error);
+            addSystemMessage(`播放器 ${playerData.remark} 播放失败: ${error.message}`);
+        });
+        
+        // 存储播放器实例
+        playerData.instance = player;
+        
+    } catch (error) {
+        addSystemMessage(`初始化播放器 ${playerData.remark} 失败: ${error.message}`);
+    }
+}
+
+// 移除播放器
+function removePlayer(playerId) {
+    // 从数组中查找播放器
+    let playerIndex = sidePlayers.findIndex(p => p.id === playerId);
+    let position = 'side';
+    if (playerIndex === -1) return;
+    
+    const playerData = position === 'side' ? sidePlayers[playerIndex] : bottomPlayers[playerIndex];
+    
+    // 销毁播放器实例
+    if (playerData.instance) {
+        playerData.instance.destroy();
+    }
+    
+    // 移除DOM元素
+    const playerElement = document.getElementById(playerId);
+    if (playerElement) {
+        playerElement.remove();
+    }
+    
+    // 从数组中移除
+    if (position === 'side') {
+        sidePlayers.splice(playerIndex, 1);
+    }
+    
+    savePlayersToStorage();
+    addSystemMessage(`已移除播放器: ${playerData.remark}`);
+}
+
+// 保存播放器数据到本地存储
+function savePlayersToStorage() {
+    const playersData = {
+        sidePlayers: sidePlayers.map(p => ({ 
+            id: p.id, 
+            remark: p.remark, 
+            streamUrl: p.streamUrl,
+            position: p.position 
+        }))
+    };
+    localStorage.setItem('multiPlayersData', JSON.stringify(playersData));
+}
+
+// 从本地存储加载播放器数据
+function loadPlayersFromStorage() {
+    const savedData = localStorage.getItem('multiPlayersData');
+    if (savedData) {
+        try {
+            const playersData = JSON.parse(savedData);
+            
+            // 加载右侧播放器
+            playersData.sidePlayers.forEach(playerData => {
+                createPlayerElement(playerData);
+            });
+            
+            addSystemMessage(`已加载 ${sidePlayers.length} 个副播放器`);
+        } catch (error) {
+            console.error('加载播放器数据失败:', error);
+        }
+    }
+}
 // 初始化Socket连接
 function initializeSocket() {
     socket = io();
@@ -108,18 +353,11 @@ function initializeVideoPlayer() {
         dp = new DPlayer({
             container: document.getElementById('dplayer'),
             screenshot: true,
+            mutex: false,
             video: {
                 url: '',
                 type: 'auto'
-            },
-            contextmenu: [
-                {
-                    text: '弹幕设置',
-                    click: () => {
-                        document.querySelector('.controls').scrollIntoView({ behavior: 'smooth' });
-                    }
-                }
-            ]
+            }
         });
         
         // 监听全屏变化
@@ -138,7 +376,17 @@ function initializeVideoPlayer() {
                 adjustDanmuForFullscreen();
             }, 300);
         });
-        
+        // 监听播放器容器尺寸变化
+        const playerContainer = document.getElementById('dplayer');
+        if (playerContainer) {
+            // 使用 ResizeObserver 监听尺寸变化
+            const resizeObserver = new ResizeObserver(() => {
+                setTimeout(() => {
+                    adjustDanmuForFullscreen();
+                }, 100);
+            });
+            resizeObserver.observe(playerContainer);
+        }
         // 播放器事件
         dp.on('play', () => {
             if (playBtn && pauseBtn) {
@@ -178,10 +426,10 @@ function adjustDanmuForFullscreen() {
         // 移除所有尺寸类
         danmuContainer.classList.remove('danmu-fullscreen', 'danmu-halfscreen', 'danmu-thirdscreen');
         
-        // 根据当前激活的按钮设置尺寸
-        if (halfScreenDanmuBtn.classList.contains('active')) {
+        // 根据当前激活的按钮重新设置尺寸
+        if (halfScreenDanmuBtn && halfScreenDanmuBtn.classList.contains('active')) {
             danmuContainer.classList.add('danmu-halfscreen');
-        } else if (thirdScreenDanmuBtn.classList.contains('active')) {
+        } else if (thirdScreenDanmuBtn && thirdScreenDanmuBtn.classList.contains('active')) {
             danmuContainer.classList.add('danmu-thirdscreen');
         } else {
             danmuContainer.classList.add('danmu-fullscreen');
@@ -197,10 +445,30 @@ function adjustDanmuForFullscreen() {
 }
 
 function extractTaskId(fullTaskId) {
-    // 从 "1968471452816072704[抖音]" 中提取 "1968471452816072704"
-    return fullTaskId.replace(/\[.*?\]/g, '').trim();
+    // 从 "1234[6][梁海鹏]" 中提取 "1234"
+    // 新格式: id[roomId][备注]
+    const match = fullTaskId.match(/^(\d+)\[(\d+)\](?:\[(.*)\])?$/);
+    return match ? match[1] : fullTaskId.replace(/\[.*?\]/g, '').trim();
+}
+// 从完整任务ID中提取 roomId
+function extractRoomId(fullTaskId) {
+    // 从 "1234[6][梁海鹏]" 中提取 "6"
+    const match = fullTaskId.match(/^(\d+)\[(\d+)\](?:\[(.*)\])?$/);
+    return match ? match[2] : '0'; // 如果没有roomId，默认为0
+}
+// 从完整任务ID中提取备注
+function extractRemark(fullTaskId) {
+    // 从 "1234[6][梁海鹏]" 中提取 "梁海鹏"
+    const match = fullTaskId.match(/^(\d+)\[(\d+)\](?:\[(.*)\])?$/);
+    return match && match[3] ? match[3] : '';
 }
 
+// 验证任务ID格式
+function isValidTaskIdFormat(taskId) {
+    // 验证格式: 数字[数字][任意字符]
+    // 例如: 1234[6][梁海鹏]
+    return /^\d+\[\d+\](?:\[.*\])?$/.test(taskId);
+}
 let isBarrageFlyWSConnect = false;
 // 设置事件监听
 function setupEventListeners() {
@@ -208,7 +476,7 @@ function setupEventListeners() {
         console.error('控件元素未找到');
         return;
     }
-    
+    setDanmuArea('third'); // 默认弹幕区域1/3
     // 打开/关闭设置按钮
     if (adminPasswordSetBtn) {
         adminPasswordSetBtn.addEventListener('click', () => {
@@ -481,23 +749,47 @@ function addTaskIds(password) {
         return;
     }
     
-    // 添加新任务ID并订阅
+    // 验证格式并添加新任务ID
+    const validTaskIds = [];
     newTaskIds.forEach(taskId => {
-        // 检查是否已存在相同的任务ID（忽略备注）
+        if (!isValidTaskIdFormat(taskId)) {
+            addSystemMessage(`任务ID格式错误: ${taskId}，正确格式: id[roomId][备注]，如: 1234[6][梁海鹏]`);
+            return;
+        }
+        
+        // 检查是否已存在相同的任务ID（比较纯ID）
+        const pureId = extractTaskId(taskId);
         const exists = config.currentTaskIds.some(existingId => 
-            extractTaskId(existingId) === extractTaskId(taskId)
+            extractTaskId(existingId) === pureId
         );
         
         if (!exists) {
-            addTaskIdToList(taskId);
-            config.currentTaskIds.push(taskId);
-            subscribeToTask(taskId, password); // 订阅新任务
+            validTaskIds.push(taskId);
+            
+            // 更新备注映射
+            const roomId = extractRoomId(taskId);
+            const remark = extractRemark(taskId);
+            if (roomId && remark) {
+                config.remarkMap[roomId] = remark;
+            }
         }
+    });
+    
+    if (validTaskIds.length === 0) {
+        addSystemMessage('没有有效的任务ID可添加');
+        return;
+    }
+    
+    // 添加新任务ID并订阅
+    validTaskIds.forEach(taskId => {
+        addTaskIdToList(taskId);
+        config.currentTaskIds.push(taskId);
+        subscribeToTask(taskId, password);
     });
     
     // 清空输入框
     taskIdInput.value = '';
-    addSystemMessage(`已添加并订阅 ${newTaskIds.length} 个任务ID`);
+    addSystemMessage(`已添加并订阅 ${validTaskIds.length} 个任务ID`);
 }
 
 // 删除选中的任务ID（并取消订阅）
@@ -516,7 +808,14 @@ function removeSelectedTaskIds(password) {
         const index = config.currentTaskIds.indexOf(taskId);
         if (index > -1) {
             config.currentTaskIds.splice(index, 1);
-            unsubscribeFromTask(taskId, password); // 取消订阅
+            
+            // 从备注映射中移除
+            const roomId = extractRoomId(taskId);
+            if (roomId && config.remarkMap[roomId]) {
+                delete config.remarkMap[roomId];
+            }
+            
+            unsubscribeFromTask(taskId, password);
         }
         option.remove();
     });
@@ -569,9 +868,7 @@ function playStream(streamUrl, password) {
         
         // 添加延迟确保视频加载
         setTimeout(() => {
-            dp.play().catch(error => {
-                addSystemMessage(`播放失败: ${error.message}`);
-            });
+            
         }, 100);
         
         addSystemMessage(`开始播放: ${streamUrl}`);
@@ -587,25 +884,26 @@ function setDanmuArea(mode) {
     // 移除所有尺寸类
     danmuContainer.classList.remove('danmu-fullscreen', 'danmu-halfscreen', 'danmu-thirdscreen');
     
-    // 更新按钮激活状态
-    const buttons = document.querySelectorAll('.area-btn');
-    buttons.forEach(btn => btn.classList.remove('active'));
+    // 更新按钮激活状态 - 先移除所有active类
+    if (fullScreenDanmuBtn) fullScreenDanmuBtn.classList.remove('active');
+    if (halfScreenDanmuBtn) halfScreenDanmuBtn.classList.remove('active');
+    if (thirdScreenDanmuBtn) thirdScreenDanmuBtn.classList.remove('active');
     
     // 根据模式设置
     switch(mode) {
         case 'half':
             danmuContainer.classList.add('danmu-halfscreen');
-            halfScreenDanmuBtn.classList.add('active');
+            if (halfScreenDanmuBtn) halfScreenDanmuBtn.classList.add('active');
             addSystemMessage('弹幕显示区域设置为半屏');
             break;
         case 'third':
             danmuContainer.classList.add('danmu-thirdscreen');
-            thirdScreenDanmuBtn.classList.add('active');
+            if (thirdScreenDanmuBtn) thirdScreenDanmuBtn.classList.add('active');
             addSystemMessage('弹幕显示区域设置为1/3屏');
             break;
         default: // full
             danmuContainer.classList.add('danmu-fullscreen');
-            fullScreenDanmuBtn.classList.add('active');
+            if (fullScreenDanmuBtn) fullScreenDanmuBtn.classList.add('active');
             addSystemMessage('弹幕显示区域设置为全屏');
     }
     
@@ -623,6 +921,7 @@ function setDanmuArea(mode) {
         danmuContainer.innerHTML = '';
     }
 }
+
 // 添加显示/隐藏设置函数
 function toggleAdminSettings(show) {
     if (!adminSettings || adminSettings.length === 0) return;
@@ -670,7 +969,7 @@ function setupSocketListeners() {
     });
     socket.on('current-stream-url', (streamUrl) => {
         addSystemMessage('读取直播流地址：' + streamUrl);
-        streamUrlElement.value = streamUrl;
+        streamUrlInput.value = streamUrl;
     });
     socket.on('disconnect', () => {
         if (connectionStatus) {
@@ -737,17 +1036,25 @@ function setupSocketListeners() {
 function updateSubscriptionList(taskIds) {
     if (!taskIdList) return;
     
-    // 清空当前任务ID列表
+    // 清空当前任务ID列表和备注映射
     config.currentTaskIds = [];
+    config.remarkMap = {};
     
     // 清空UI列表
     taskIdList.innerHTML = '';
     
-    // 更新任务ID列表
+    // 更新任务ID列表和备注映射
     taskIds.forEach(taskId => {
         if (!config.currentTaskIds.includes(taskId)) {
             addTaskIdToList(taskId);
             config.currentTaskIds.push(taskId);
+            
+            // 更新备注映射
+            const roomId = extractRoomId(taskId);
+            const remark = extractRemark(taskId);
+            if (roomId && remark) {
+                config.remarkMap[roomId] = remark;
+            }
         }
     });
     
@@ -762,6 +1069,7 @@ function updateSubscriptionList(taskIds) {
     
     addSystemMessage(`已更新订阅列表，当前订阅 ${taskIds.length} 个任务`);
 }
+
 // 处理消息
 function processMessage(data) {
     const roomId = data.roomId;
@@ -792,9 +1100,13 @@ function displayDanmu(roomId, platform, msgDto) {
     
     // 获取平台标签
     const platformLabel = getPlatformLabel(platform);
+    
+    // 获取备注信息
+    const remark = config.remarkMap[roomId] || '';
+    
     // 使用Danmaku库显示弹幕
     if (danmaku) {
-        // 创建外层容器（负责圆角和背景）
+        // 创建外层容器
         const containerElement = document.createElement('div');
         containerElement.style.cssText = `
             display: inline-block;
@@ -804,7 +1116,7 @@ function displayDanmu(roomId, platform, msgDto) {
             overflow: hidden;
         `;
         
-        // 创建内层内容容器（负责边框和布局）
+        // 创建内层内容容器
         const danmuElement = document.createElement('div');
         danmuElement.style.cssText = `
             font-size: ${fontSize}px;
@@ -816,30 +1128,39 @@ function displayDanmu(roomId, platform, msgDto) {
             gap: 5px;
         `;
         
-        // 添加平台标签
+        // 添加平台标签 - 修改为圆角
         if (platformLabel) {
             const platformSpan = document.createElement('span');
             platformSpan.className = 'platform-label';
-            platformSpan.style.background = platformLabel.color;
+            platformSpan.style.cssText = `
+                background: ${platformLabel.color};
+                color: white;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 0.7em;
+                font-weight: bold;
+                line-height: 1;
+            `;
             platformSpan.textContent = platformLabel.text;
             danmuElement.appendChild(platformSpan);
         }
         
-        // 添加徽章（如果有）
-        // if (msgDto.badgeLevel && msgDto.badgeLevel !== 0) {
-        //     const badgeSpan = document.createElement('span');
-        //     badgeSpan.className = 'badge';
-        //     badgeSpan.textContent = `${msgDto.badgeLevel}${msgDto.badgeName}`;
-        //     //danmuElement.appendChild(badgeSpan);
-        // }
-        
-        // // 添加用户名
-        // const usernameSpan = document.createElement('span');
-        // usernameSpan.className = 'username';
-        // usernameSpan.textContent = msgDto.username + ': ';
-        // usernameSpan.style.fontWeight = 'bold';
-        // usernameSpan.style.color = '#ffffff';
-        // danmuElement.appendChild(usernameSpan);
+        // 添加备注（如果有）- 也修改为圆角保持一致性
+        if (remark) {
+            const remarkSpan = document.createElement('span');
+            remarkSpan.className = 'remark-label';
+            remarkSpan.style.cssText = `
+                background: #1a1a2e;
+                color: white;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 0.7em;
+                font-weight: bold;
+                line-height: 1;
+            `;
+            remarkSpan.textContent = remark;
+            danmuElement.appendChild(remarkSpan);
+        }
         
         // 添加内容
         const contentSpan = document.createElement('span');
@@ -847,8 +1168,10 @@ function displayDanmu(roomId, platform, msgDto) {
         contentSpan.textContent = msgDto.content;
         contentSpan.style.color = '#ffffff';
         danmuElement.appendChild(contentSpan);
+        
         // 组装元素
         containerElement.appendChild(danmuElement);
+        
         // 使用自定义渲染
         danmaku.emit({
             text: '',
@@ -948,7 +1271,12 @@ function addMessageLog(roomId, platform, type, msgDto) {
     
     const messageElement = document.createElement('div');
     
-    let content = `[房间 ${roomId}] `;
+    // 获取备注信息
+    const remark = config.remarkMap[roomId] || '';
+    let remarkText = remark ? `[${remark}] ` : '';
+    
+    let content = `[房间 ${roomId}] ${remarkText}`;
+    
     if (type === 'DANMU') {
         messageElement.className = 'message message-danmu';
         if (msgDto.badgeLevel && msgDto.badgeLevel !== 0) {
