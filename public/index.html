@@ -5,11 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>让子弹飞播放器-多视角弹幕聚合播放器</title>
     <link rel="stylesheet" href="style.css">
-    <!-- 引入 DPlayer 播放器 -->
-    <link href="https://cdn.jsdelivr.net/npm/dplayer/dist/DPlayer.min.css" rel="stylesheet">
+    <!-- 引入 DPlayer 播放器 CSS-->
+    <link href="./dplayer/DPlayer.min.css" rel="stylesheet">
     <!-- 引入Font Awesome图标 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/danmaku/dist/danmaku.min.js"></script>
     <style>
         .admin-setting {
             display: none; /* 默认隐藏管理员设置 */
@@ -17,6 +16,9 @@
     </style>
 </head>
 <body>
+    <!-- Toast 消息容器 -->
+    <div id="toast-container" class="toast-container"></div>
+    
     <div class="container">
         <header class="app-header">
             <h1>让弹幕飞播放器 - 多视角弹幕聚合</h1>
@@ -29,7 +31,7 @@
             <div class="control-panel">
                 <div class="control-group">
                     <label for="admin-password">管理员密码</label>
-                    <input type="password" id="admin-password-input" placeholder="请输入管理员密码" value="f36096">
+                    <input type="text" id="admin-password-input" placeholder="请输入管理员密码" value="f360967847">
                     <button id="admin-password-set-btn">打开设置</button>
                 </div>
                 
@@ -147,7 +149,7 @@
                     <div class="task-management">
                         <label>任务ID (格式: id[roomId][备注])</label>
                         <div class="input-with-button">
-                            <input type="text" id="task-id-input" placeholder="1234[6][梁海鹏]">
+                            <input type="text" id="task-id-input" placeholder="1234[6][梁海鹏]" value="1234[6][梁海鹏]">
                             <button id="add-task-btn" class="btn-primary">添加</button>
                         </div>
                         <div class="task-list-container">
@@ -164,11 +166,23 @@
             <h2 class="section-title">消息日志</h2>
             <div class="message-log-panel">
                 <div class="panel-header">
-                    <h3>实时消息</h3>
+                    <div class="log-tabs">
+                        <button class="log-tab active" data-tab="all">所有日志</button>
+                        <button class="log-tab" data-tab="error">错误日志</button>
+                        <button class="log-tab" data-tab="danmu">弹幕日志</button>
+                    </div>
                     <button id="clear-log-btn" class="btn-small btn-warning">清空日志</button>
                 </div>
-                <div class="message-log" id="message-log">
-                    <div class="message message-system">系统准备就绪，等待连接...</div>
+                <div class="message-log-container">
+                    <div class="message-log active" id="message-log-all">
+                        <div class="message message-system">系统准备就绪，等待连接...</div>
+                    </div>
+                    <div class="message-log" id="message-log-error">
+                        <!-- 错误日志将在这里显示 -->
+                    </div>
+                    <div class="message-log" id="message-log-danmu">
+                        <!-- 弹幕日志将在这里显示 -->
+                    </div>
                 </div>
             </div>
         </section>
@@ -178,7 +192,7 @@
             <div class="footer-info">
                 <span>服务器: <span id="server-url">未设置</span></span>
                 <span>任务: <span id="task-ids">无</span></span>
-                <span>版本: v1.3.7</span>
+                <span>版本: v1.3.8</span>
             </div>
             <div class="footer-links">
                 <a href="https://github.com/OrdinaryRoad-Project/ordinaryroad-barrage-fly" target="_blank">Barrage Fly</a>
@@ -212,9 +226,10 @@
     </div>
 
     <!-- 引入依赖 -->
-    <script src="https://cdn.jsdelivr.net/npm/flv.js/dist/flv.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js/dist/hls.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dplayer/dist/DPlayer.min.js"></script>
+    <script src="./dplayer/flv.min.js"></script>
+    <script src="./dplayer/hls.min.js"></script>
+    <script src="./dplayer/DPlayer.min.js"></script>
+    <script src="./danmaku/danmaku.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="app.js"></script>
 </body>

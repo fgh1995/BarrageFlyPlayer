@@ -1,3 +1,4 @@
+const Tag = 'server.js';
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -27,7 +28,11 @@ io.on('connection', (socket) => {
     // 添加密码验证函数
     function verifyPassword(password, action) {
         if (password !== ADMIN_PASSWORD) {
-            socket.emit('system-message', `错误: ${action} 需要管理员权限，密码错误`);
+            socket.emit('system-message', {
+                type: 'logAndtoast', // 或 'toast'
+                level: 'error', // error, warning, info, success
+                text: action + '需要管理员权限，请确认密码是否正确'
+            });
             return false;
         }
         return true;
@@ -36,9 +41,8 @@ io.on('connection', (socket) => {
     // 处理订阅请求 - 添加密码验证
     socket.on('subscribe', (data) => {
         if (!verifyPassword(data.password, "订阅任务")) return;
-        
-        console.log('收到订阅请求:', data);
-        
+
+        console.log(Tag + '-收到订阅请求:', data);
         // 添加新的任务ID到列表（避免重复），保存带备注的数据
         data.taskIds.forEach(taskId => {
             if (!taskIds.includes(taskId)) {
@@ -52,9 +56,12 @@ io.on('connection', (socket) => {
                 taskIds: data.pureTaskIds || data.taskIds.map(id => id.replace(/\[.*?\]/g, '').trim()),
                 cmd: CMD.SUBSCRIBE
             });
-            socket.emit('system-message', `添加订阅任务: ${data.taskIds.join(', ')}`);
         } else {
-            socket.emit('system-message', '错误: 未连接到BarrageFly服务器');
+            socket.emit('system-message', {
+                type: 'logAndtoast',
+                level: 'warning', // error, warning, info, success
+                text:'未连接到BarrageFly服务器'
+            });
         }
         
         // 广播更新后的订阅列表给所有客户端
@@ -81,9 +88,12 @@ io.on('connection', (socket) => {
                 taskIds: data.pureTaskIds || data.taskIds.map(id => id.replace(/\[.*?\]/g, '').trim()),
                 cmd: CMD.UNSUBSCRIBE
             });
-            socket.emit('system-message', `取消订阅任务: ${data.taskIds.join(', ')}`);
         } else {
-            socket.emit('system-message', '错误: 未连接到BarrageFly服务器');
+            socket.emit('system-message', {
+                type: 'logAndtoast',
+                level: 'warning', // error, warning, info, success
+                text: '未连接到BarrageFly服务器'
+            });
         }
         
         // 广播更新后的订阅列表给所有客户端
@@ -93,26 +103,26 @@ io.on('connection', (socket) => {
     // 处理关闭BarrageFly-WS连接 - 添加密码验证
     socket.on('close-barrage-fly-ws', (password) => {
         if (!verifyPassword(password, "断开BarrageFly连接")) return;
-        
-        console.log('主动关闭BarrageFly-WebSocket连接:' + url);
-        socket.emit('system-message', '主动关闭BarrageFly-WebSocket连接:' + url);
+        socket.emit('system-message', {
+            type: 'logAndtoast',
+            level: 'info', // error, warning, info, success
+            text: '主动关闭BarrageFly-WebSocket连接:' + url
+        });
         if (client) {
            client.destroy();
         }
         isBarrageFlyWSConnect = false;
     });
-    socket.on('verify-admin-password', (password) => {
-        const isValid = password === ADMIN_PASSWORD;
-        socket.emit('admin-password-result', { success: isValid });
-        
-        if (isValid) {
-            console.log('管理员密码验证成功');
-            socket.emit('system-message', '管理员密码验证成功');
-        } else {
-            console.log('管理员密码验证失败');
-            socket.emit('system-message', '管理员密码错误');
-        }
+    
+    socket.on('open_setting', (password) => {
+        if (!verifyPassword(password, "打开管理员设置")) return;
+        socket.emit('system-message', {
+            type: 'open_setting', // 或 'toast'
+            level: 'success', // error, warning, info, success
+            text: '密码验证成功，已打开管理员设置'
+        });
     });
+    
     // 处理设置BarrageFly-WS地址 - 添加密码验证
     socket.on('set-barrage-fly-ws', (barrageFlyWSUrl, password) => {
         if (!verifyPassword(password, "设置BarrageFly地址")) return;
@@ -120,8 +130,11 @@ io.on('connection', (socket) => {
         // 校验URL有效性
         if (!isValidWebSocketURL(barrageFlyWSUrl)) {
             console.error('无效的WebSocket URL:', barrageFlyWSUrl);
-            io.emit('status', '错误: 无效的WebSocket URL格式');
-            io.emit('system-message', 'barrageFly-WebSocket通信地址格式无效，请使用 ws:// 或 wss:// 开头的地址');
+            socket.emit('system-message', {
+                type: 'logAndtoast',
+                level: 'warning', // error, warning, info, success
+                text: '通信地址' + url + ' 格式无效，请使用 ws:// 或 wss:// 开头的地址'
+            });
             return;
         }
         // 如果已有连接，先关闭
@@ -130,7 +143,7 @@ io.on('connection', (socket) => {
         }
         url = barrageFlyWSUrl;
         console.log('连接BarrageFly-WS通信地址:' + url);
-        io.emit('status', '连接BarrageFly-WS通信地址:' + url);
+        //io.emit('status', '连接BarrageFly-WS通信地址:' + url);
         
         // 创建WebSocket客户端
         client = new WebSocketClient({
@@ -156,13 +169,32 @@ io.on('connection', (socket) => {
         })
         .onSystemMsg((msgs) => {
             msgs.forEach(msg => {
-                io.emit('system-message', msg.taskId);
+                // 检查是否是频道日志
+                if (msg.type === 'CHANNEL_LOG') {
+                    // 将频道日志转发给前端
+                    io.emit('channel-log', {
+                        level: msg.level,
+                        message: msg.message,
+                        timestamp: new Date().toISOString(),
+                        error: msg.error
+                    });
+                } else {
+                    // 原有的系统消息处理
+                    socket.emit('system-message', {
+                        type: 'log',
+                        level: 'info', // error, warning, info, success
+                        text: msg.taskId || JSON.stringify(msg)
+                    });
+                }
             });
         })
         .onConnected(() => {
-            console.log('BarrageFly连接建立成功');
             io.emit('status', 'connected');
-            io.emit('system-message', '成功连接到BarrageFly服务器');
+            socket.emit('system-message', {
+                type: 'logAndtoast',
+                level: 'success', // error, warning, info, success
+                text: '成功连接到BarrageFly服务器'
+            });
             isBarrageFlyWSConnect = true;
             // 重新订阅所有任务
             if (taskIds.length > 0) {
@@ -177,35 +209,48 @@ io.on('connection', (socket) => {
         .onClosed(() => {
             console.log('BarrageFly连接已关闭');
             io.emit('status', 'disconnected');
-            io.emit('system-message', 'BarrageFly连接已关闭');
+            socket.emit('system-message', {
+                type: 'logAndtoast',
+                level: 'error', // error, warning, info, success
+                text: `BarrageFly连接已关闭`
+            });
+            client = null;
             isBarrageFlyWSConnect = false;
         });
 
         // 启动WebSocket客户端
         client.connect()
             .then((connectedClient) => {
-                console.log('WebSocket客户端已连接');
+                console.log('BarrageFly已连接');
             })
             .catch(err => {
-                console.error('连接失败:', err);
-                io.emit('system-message', `连接失败: ${err.message}`);
+                console.error('message:', err);
+                socket.emit('system-message', {
+                    type: 'logAndtoast',
+                    level: 'error', // error, warning, info, success
+                    text: `连接失败: ${err.message}`
+                });
                 client = null;
             });
     });
     
     // 处理设置直播流地址 - 添加密码验证
     socket.on('set-stream-url', (newStreamUrl, password) => {
-        if (!verifyPassword(password, "设置直播流地址")) return;
+        if (!verifyPassword(password, "保存直播流地址")) return;
         
         streamUrl = newStreamUrl;
         console.log('保存直播流地址:' + streamUrl);
-        socket.emit('system-message', `直播流地址已设置为: ${streamUrl}`);
+        socket.emit('system-message', {
+            type: 'logAndtoast',
+            level: 'success', // error, warning, info, success
+            text: `保存直播流地址: ${streamUrl} 成功`
+        });
     });
+    
     socket.on('get-stream-url', () => {
         socket.emit('current-stream-url', streamUrl);
     });
-    
-});
+}); // 这里缺少了 connection 事件的闭合大括号
 
 // URL有效性校验函数
 function isValidWebSocketURL(url) {
@@ -240,6 +285,7 @@ function isValidWebSocketURL(url) {
         return false;
     }
 }
+
 // 优雅关闭
 process.on('SIGINT', () => {
     console.log('正在关闭服务器...');

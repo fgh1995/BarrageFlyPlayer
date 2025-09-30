@@ -13,6 +13,8 @@ let danmuOpacity = 0.8;
 let fontSize = 20;
 let danmuVisible = true;
 let adminSettingsOpen = false;
+let currentLogTab = 'all'; // 当前日志标签页
+let errorMessageCount = 0;
 // Danmaku 实例
 let danmaku = null;
 let adminPassword = "";
@@ -24,7 +26,7 @@ const MAX_BOTTOM_PLAYERS = 4; // 底部最大播放器数量
 // DOM元素
 let danmuContainer, messageLog, connectionStatus, danmuCountElement, roomCountElement, serverUrlElement, barrageflyWsInput, barrageflyWsSetBtn,adminSettings,adminPasswordSetBtn;
 let speedControl, speedValue, opacityControl, opacityValue, fontSizeControl,fontSizeValue;
-let clearBtn, clearLogBtn, toggleDanmuBtn, playBtn, pauseBtn, streamUrlInput, trackCountElement;
+let clearBtn, clearLogBtn, toggleDanmuBtn, playBtn, pauseBtn, streamUrlInput, trackCountElement,removeTaskBtn;
 
 // 视频播放器变量
 let dp = null;
@@ -41,6 +43,7 @@ function init() {
     initializeDanmaku(); // 初始化弹幕库
     toggleAdminSettings(false);    // 初始化时隐藏管理员设置
     initializeMultiPlayers();
+    initializeLogTabs(); // 初始化日志标签页
 }
 // 初始化多播放器功能
 function initializeMultiPlayers() {
@@ -69,7 +72,32 @@ function initializeDanmaku() {
         // 可以在这里设置备用模式
     }
 }
+function initializeLogTabs() {
+    const logTabs = document.querySelectorAll('.log-tab');
+    logTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const tabName = tab.getAttribute('data-tab');
+            switchLogTab(tabName);
+        });
+    });
+}
 
+// 切换日志标签页
+function switchLogTab(tabName) {
+    currentLogTab = tabName;
+    
+    // 更新标签页按钮状态
+    document.querySelectorAll('.log-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelector(`.log-tab[data-tab="${tabName}"]`).classList.add('active');
+    
+    // 显示对应的日志容器
+    document.querySelectorAll('.message-log').forEach(log => {
+        log.classList.remove('active');
+    });
+    document.getElementById(`message-log-${tabName}`).classList.add('active');
+}
 // 初始化DOM元素
 function initializeDOMElements() {
     // 播放器相关
@@ -494,7 +522,7 @@ function setupEventListeners() {
             }
             
             // 发送密码验证请求
-            socket.emit('verify-admin-password', password);
+            socket.emit('open_setting', password);
         });
     }
     // 设置Barrage-Fly-WS通信地址
@@ -509,7 +537,7 @@ function setupEventListeners() {
             if (!isBarrageFlyWSConnect) {
                 const input = barrageflyWsInput.value.trim();
                 if (!input) {
-                    addSystemMessage('请输入BarrageFly-WS通信地址');
+                    showErrorToast('请输入BarrageFly-WS通信地址');
                     return;
                 }
                 if (!isValidWebSocketURL(input)) {
@@ -581,10 +609,23 @@ function setupEventListeners() {
     // 清空日志
     if (clearLogBtn) {
         clearLogBtn.addEventListener('click', () => {
-            if (messageLog) {
-                messageLog.innerHTML = '';
+            if (currentLogTab === 'all') {
+                // 清空所有日志
+                if (document.getElementById('message-log-all')) {
+                    document.getElementById('message-log-all').innerHTML = '';
+                }
+                if (document.getElementById('message-log-error')) {
+                    document.getElementById('message-log-error').innerHTML = '';
+                }
+                messageCount = 0;
+                errorMessageCount = 0;
+            } else {
+                // 只清空错误日志
+                if (document.getElementById('message-log-error')) {
+                    document.getElementById('message-log-error').innerHTML = '';
+                }
+                errorMessageCount = 0;
             }
-            messageCount = 0;
             addSystemMessage('已清空消息日志');
         });
     }
@@ -947,14 +988,6 @@ function toggleAdminSettings(show) {
 // 设置Socket.io监听
 function setupSocketListeners() {
     if (!socket) return;
-    // 监听密码验证结果
-    socket.on('admin-password-result', (result) => {
-        if (result.success) {
-            toggleAdminSettings(true); // 打开设置
-        } else {
-            addSystemMessage('管理员密码错误');
-        }
-    });
     socket.on('connect', () => {
         if (connectionStatus) {
             forwarderConnectionStatus.textContent = '已连接';
@@ -1004,6 +1037,40 @@ function setupSocketListeners() {
         // 更新UI显示当前订阅的任务
         updateSubscriptionList(taskIds);
     });
+    socket.on('channel-log', (log) => {
+        if (!log || !log.level || !log.message) return;
+        
+        if (log.level === 'ERROR') {
+            try {
+                const msg = JSON.parse(log.message);
+                
+                // 检查是否为特定的"任务不存在"错误
+                if (msg.data && msg.data.message && 
+                    msg.data.message.includes("the task [") && 
+                    msg.data.message.includes("] don't have contexts yet")) {
+                    
+                    // 提取任务ID
+                    const taskIdMatch = msg.data.message.match(/the task \[(\d+)\]/);
+                    if (taskIdMatch && taskIdMatch[1]) {
+                        const taskId = taskIdMatch[1];
+                        addErrorMessage(`任务 ${taskId} 不存在`);
+                    } else {
+                        addErrorMessage('任务不存在');
+                    }
+                } else {
+                    // 其他错误，使用原消息
+                    addErrorMessage(log.level + '|' + log.message);
+                }
+            } catch (error) {
+                // 如果JSON解析失败，使用原消息
+                addErrorMessage(log.level + '|' + log.message);
+            }
+        } else if (log.level === 'SUCCESS') {
+            showSuccessToast(log.message, 2000);
+        } else {
+            addSystemMessage(log.level + '|' + log.message);
+        }
+    });
 
     socket.on('current-barrage-fly-ws-connect', (newisBarrageFlyWSConnect,barrageFlyWSUrl) => {
         console.log('newisBarrageFlyWSConnect->' + newisBarrageFlyWSConnect);
@@ -1020,8 +1087,57 @@ function setupSocketListeners() {
         }
     });
     
-    socket.on('system-message', (msg) => {
-        addSystemMessage('系统消息: ' + JSON.stringify(msg));
+    socket.on('system-message', (data) => {
+        if (data.type && data.level && data.text) {
+            // 根据类型处理消息
+            if (data.type === 'toast') {
+                // 使用对应的 Toast 函数
+                switch(data.level) {
+                    case 'success':
+                        showSuccessToast(data.text);
+                        break;
+                    case 'error':
+                        showErrorToast(data.text);
+                        break;
+                    case 'warning':
+                        showWarningToast(data.text);
+                        break;
+                    case 'info':
+                    default:
+                        showInfoToast(data.text);
+                        break;
+                }
+            } else if (data.type === 'log') {
+                // 默认作为日志处理
+                addSystemMessage(data.text, data.level === 'error');
+            } else if (data.type === 'logAndtoast') {
+                addSystemMessage(data.text, data.level === 'error');
+                // 使用对应的 Toast 函数
+                switch(data.level) {
+                    case 'success':
+                        showSuccessToast(data.text);
+                        break;
+                    case 'error':
+                        showErrorToast(data.text);
+                        break;
+                    case 'warning':
+                        showWarningToast(data.text);
+                        break;
+                    case 'info':
+                    default:
+                        showInfoToast(data.text);
+                        break;
+                }
+            } else if(data.type === 'open_setting') {
+                if (data.level === 'success') {
+                    toggleAdminSettings(true); // 打开设置
+                    showSuccessToast(data.text,1000);
+                }
+            } else {
+                // 兼容旧格式
+                addSystemMessage('系统消息: ' + JSON.stringify(data));
+            }
+        }
     });
     
     socket.on('error', (error) => {
@@ -1267,15 +1383,17 @@ function displayGift(roomId, platform, msgDto) {
 }
 // 添加消息到日志
 function addMessageLog(roomId, platform, type, msgDto) {
-    if (!messageLog) return;
+    const allLog = document.getElementById('message-log-all');
+    const danmuLog = document.getElementById('message-log-danmu');
     
-    const messageElement = document.createElement('div');
+    if (!allLog || !danmuLog) return;
     
     // 获取备注信息
     const remark = config.remarkMap[roomId] || '';
     let remarkText = remark ? `[${remark}] ` : '';
     
     let content = `[房间 ${roomId}] ${remarkText}`;
+    let messageElement = document.createElement('div');
     
     if (type === 'DANMU') {
         messageElement.className = 'message message-danmu';
@@ -1283,6 +1401,12 @@ function addMessageLog(roomId, platform, type, msgDto) {
             content += `[${msgDto.badgeLevel}${msgDto.badgeName}] `;
         }
         content += `${msgDto.username}: ${msgDto.content}`;
+        
+        // 添加到弹幕日志
+        const danmuElement = messageElement.cloneNode(true);
+        danmuElement.textContent = content;
+        danmuLog.appendChild(danmuElement);
+        
     } else {
         messageElement.className = 'message message-gift';
         if (msgDto.badgeLevel && msgDto.badgeLevel !== 0) {
@@ -1291,45 +1415,167 @@ function addMessageLog(roomId, platform, type, msgDto) {
         content += `${msgDto.username} ${msgDto.data?.action || "赠送"} ${msgDto.giftName} × ${msgDto.giftCount}`;
     }
     
+    // 添加到所有日志
     messageElement.textContent = content;
-    messageLog.appendChild(messageElement);
-    
-    // 自动滚动到底部
-    messageLog.scrollTop = messageLog.scrollHeight;
+    allLog.appendChild(messageElement);
     
     // 限制消息数量
     messageCount++;
     if (messageCount > 200) {
-        messageLog.removeChild(messageLog.firstChild);
+        allLog.removeChild(allLog.firstChild);
         messageCount--;
+    }
+    
+    // 限制弹幕日志数量
+    const danmuMessages = danmuLog.querySelectorAll('.message');
+    if (danmuMessages.length > 200) {
+        danmuLog.removeChild(danmuMessages[0]);
     }
 }
 
 // 添加系统消息
-function addSystemMessage(text) {
-    if (!messageLog) return;
+function addSystemMessage(text, isError = false) {
+    const allLog = document.getElementById('message-log-all');
+    const errorLog = document.getElementById('message-log-error');
+    
+    if (!allLog) return;
     
     const messageElement = document.createElement('div');
-    messageElement.className = 'message message-system';
+    messageElement.className = isError ? 'message message-error' : 'message message-system';
     messageElement.textContent = `[系统] ${new Date().toLocaleTimeString()} - ${text}`;
-    messageLog.appendChild(messageElement);
+    
+    // 添加到所有日志
+    allLog.appendChild(messageElement);
+    
+    // 如果是错误消息，也添加到错误日志
+    if (isError && errorLog) {
+        const errorElement = messageElement.cloneNode(true);
+        errorLog.appendChild(errorElement);
+        errorMessageCount++;
+        
+        // 限制错误消息数量
+        if (errorMessageCount > 200) {
+            errorLog.removeChild(errorLog.firstChild);
+            errorMessageCount--;
+        }
+    }
     
     // 自动滚动到底部
-    messageLog.scrollTop = messageLog.scrollHeight;
+    // allLog.scrollTop = allLog.scrollHeight;
+    // if (isError && errorLog) {
+    //     errorLog.scrollTop = errorLog.scrollHeight;
+    // }
     
-    // 限制消息数量
+    // 限制所有消息数量
     messageCount++;
     if (messageCount > 200) {
-        messageLog.removeChild(messageLog.firstChild);
+        allLog.removeChild(allLog.firstChild);
         messageCount--;
     }
 }
 
+
+// 新增 Toast 消息函数 - 居中显示
+function showToast(message, type = 'info', duration = 3000) {
+    const toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) return;
+    
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    const toastId = 'toast-' + Date.now();
+    toast.id = toastId;
+    
+    // 使用 Font Awesome 图标的版本
+    const typeConfigs = {
+        'success': {
+            title: '成功',
+            icon: '<i class="fas fa-check-circle"></i>'
+        },
+        'error': {
+            title: '错误', 
+            icon: '<i class="fas fa-exclamation-circle"></i>'
+        },
+        'warning': {
+            title: '警告',
+            icon: '<i class="fas fa-exclamation-triangle"></i>'
+        },
+        'info': {
+            title: '信息',
+            icon: '<i class="fas fa-info-circle"></i>'
+        }
+    };
+    
+    const config = typeConfigs[type] || typeConfigs.info;
+    
+    toast.innerHTML = `
+        <div class="toast-header">
+            <span class="toast-icon">${config.icon}</span>
+            <span class="toast-title">${config.title}</span>
+            <button class="toast-close" onclick="removeToast('${toastId}')">×</button>
+        </div>
+        <div class="toast-message">${message}</div>
+        ${duration > 0 ? `<div class="toast-progress" style="animation-duration: ${duration}ms"></div>` : ''}
+    `;
+    
+    toastContainer.appendChild(toast);
+    
+    // 添加弹出动画
+    setTimeout(() => {
+        toast.classList.add('pop-in');
+    }, 10);
+    
+    // 自动移除
+    if (duration > 0) {
+        setTimeout(() => {
+            removeToast(toastId);
+        }, duration);
+    }
+    
+    return toastId;
+}
+
+// 移除 Toast 消息
+function removeToast(toastId) {
+    const toast = document.getElementById(toastId);
+    if (toast) {
+        toast.classList.remove('pop-in');
+        toast.classList.add('fade-out');
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 300);
+    }
+}
+
+// 添加一些便捷的 Toast 函数
+function showSuccessToast(message, duration = 3000) {
+    return showToast(message, 'success', duration);
+}
+
+function showErrorToast(message, duration = 5000) {
+    return showToast(message, 'error', duration);
+}
+
+function showWarningToast(message, duration = 4000) {
+    return showToast(message, 'warning', duration);
+}
+
+function showInfoToast(message, duration = 3000) {
+    return showToast(message, 'info', duration);
+}
+
+// 修改错误消息函数，使用新的 Toast
+function addErrorMessage(text) {
+    addSystemMessage(text, true);
+    // 同时显示居中的 Toast 提醒
+    showErrorToast(text, 5000);
+}
 // 更新计数器
 function updateCounters() {
     if (danmuCountElement) danmuCountElement.textContent = danmuCount;
 }
-
 // 添加键盘快捷键
 function setupKeyboardShortcuts() {
     document.addEventListener('keydown', (e) => {

@@ -155,14 +155,25 @@ class WebSocketClient {
           this.subscription = sub
           // 发送订阅请求，发送的消息个数为最大值（实测只要大于0，request触发一次1，和2147483647）
           this.subscription.request(0x7FFFFFFF)
+          console.log('Channel subscription established')
         },
         onNext: (payload) => {
           const msg = this._decodePayload(payload)
           if (msg.data.status) {
             if (msg.data.status === 200) {
-              console.log('channel ok')
+              console.log('channel ok');
+              this._emitMsg(EVENT_NAME.MSG_SYSTEM, {
+                type: 'CHANNEL_LOG', 
+                message: '弹幕订阅成功',
+                level: 'SUCCESS'
+              })
             } else {
               console.error('channel failed', msg)
+              this._emitMsg(EVENT_NAME.MSG_SYSTEM, {
+                type: 'CHANNEL_LOG',
+                message: `${JSON.stringify(msg)}`,
+                level: 'ERROR'
+              })
             }
             this._emitMsg(EVENT_NAME.MSG_SYSTEM, msg)
           } else {
@@ -172,10 +183,21 @@ class WebSocketClient {
         // channel被server关闭
         onComplete: () => {
           console.log('Received end of server stream.')
+          this._emitMsg(EVENT_NAME.MSG_SYSTEM, {
+            type: 'CHANNEL_LOG',
+            message: 'Received end of server stream',
+            level: 'INFO'
+          })
         },
         onError: (e) => {
-          this._emitMsg(EVENT_NAME.ERROR, e)
           console.error('An error occurred', e, e.source)
+          this._emitMsg(EVENT_NAME.MSG_SYSTEM, {
+            type: 'CHANNEL_LOG',
+            message: `Channel error: ${e.message}`,
+            level: 'ERROR',
+            error: e.toString()
+          })
+          this._emitMsg(EVENT_NAME.ERROR, e)
         }
       })
     return this
