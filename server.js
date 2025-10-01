@@ -237,13 +237,20 @@ io.on('connection', (socket) => {
     // 处理设置直播流地址 - 添加密码验证
     socket.on('set-stream-url', (newStreamUrl, password) => {
         if (!verifyPassword(password, "保存直播流地址")) return;
-        
+        if(streamUrl === newStreamUrl) {
+            socket.emit('system-message', {
+                type: 'log',
+                level: 'info', // error, warning, info, success
+                text: '直播流地址未更改，无需保存'
+            });
+            return;
+        }
         streamUrl = newStreamUrl;
-        console.log('保存直播流地址:' + streamUrl);
-        socket.emit('system-message', {
-            type: 'logAndtoast',
-            level: 'success', // error, warning, info, success
-            text: `保存直播流地址: ${streamUrl} 成功`
+            console.log('已更新直播流地址:', streamUrl);
+            socket.emit('system-message', {
+                type: 'logAndtoast',
+                level: 'success', // error, warning, info, success
+                text: '已保存新的直播流地址'
         });
     });
     

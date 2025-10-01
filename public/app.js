@@ -293,6 +293,7 @@ function initializeSubPlayer(playerData) {
             // 设置静音
             mutex: false, // 允许同时播放多个播放器，DPlayer默认是互斥的（mutex: true），所以需要设置为false
             muted: true, // 静音
+            autoplay: true
         });
         
         // 播放视频
@@ -382,6 +383,7 @@ function initializeVideoPlayer() {
             container: document.getElementById('dplayer'),
             screenshot: true,
             mutex: false,
+            autoplay: true,
             video: {
                 url: '',
                 type: 'auto'
@@ -435,6 +437,14 @@ function initializeVideoPlayer() {
         });
         
         console.log('DPlayer初始化成功');
+        setTimeout(() => {
+            const streamUrlInput = document.getElementById('stream-url');
+            if (streamUrlInput && streamUrlInput.value.trim()) {
+                const password = document.getElementById('admin-password-input') ? 
+                    document.getElementById('admin-password-input').value.trim() : '';
+                playStream(streamUrlInput.value.trim(), password);
+            }
+        }, 1000);
     } catch (error) {
         console.error('DPlayer初始化失败:', error);
         addSystemMessage('播放器初始化失败，请刷新页面重试');
@@ -895,24 +905,35 @@ function unsubscribeFromTask(fullTaskId, password) {
 }
 // 播放直播流
 function playStream(streamUrl, password) {
-    socket.emit('set-stream-url', streamUrl, password);
     if (!dp) {
         addSystemMessage('播放器未初始化');
         return;
     }
     
     try {
+        // 先设置流地址到服务器
+        if (socket) {
+            socket.emit('set-stream-url', streamUrl, password);
+        }
+        
+        // 立即切换视频源
         dp.switchVideo({
             url: streamUrl,
             type: 'auto'
         });
         
-        // 添加延迟确保视频加载
+        // 尝试播放 - 使用 try-catch 而不是 .catch()
         setTimeout(() => {
-            
-        }, 100);
+            try {
+                dp.play();
+            } catch (error) {
+                console.error('自动播放失败:', error);
+                // 不显示错误，因为可能是浏览器自动播放策略限制
+            }
+        }, 500);
         
         addSystemMessage(`开始播放: ${streamUrl}`);
+        
     } catch (error) {
         console.error('播放错误:', error);
         addSystemMessage(`播放失败: ${error.message}`);

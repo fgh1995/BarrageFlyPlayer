@@ -344,8 +344,13 @@ button {
 
 .management-panel {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: 1fr; /* 默认单列布局 */
     gap: 20px;
+}
+
+/* 当任务管理可见时，使用两列布局 */
+.management-panel:has(.admin-setting:not([style*="display: none"])) {
+    grid-template-columns: 2fr 1fr;
 }
 
 .panel-section {
@@ -403,11 +408,15 @@ button {
     padding: 8px;
 }
 
-/* Log Section */
 .log-section {
-    padding: 0;
+    padding: var(--section-padding); /* 添加上下左右内边距 */
 }
 
+.message-log-panel {
+    background: var(--card-bg); /* 添加背景色与其他部分一致 */
+    border-radius: var(--border-radius); /* 添加圆角 */
+    overflow: hidden; /* 确保圆角生效 */
+}
 .message-log-panel {
     background: transparent;
     border-radius: 0;
