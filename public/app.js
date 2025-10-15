@@ -50,6 +50,45 @@ function initializeMultiPlayers() {
     setupPlayerEventListeners();
     loadPlayersFromStorage();
 }
+// 弹幕对象池
+const danmakuPool = {
+    elements: [],
+    getElement: function() {
+        if (this.elements.length > 0) {
+            return this.elements.pop();
+        }
+        return this.createElement();
+    },
+    createElement: function() {
+        const container = document.createElement('div');
+        container.style.cssText = `
+            display: inline-block;
+            border-radius: 50px;
+            background: rgba(0, 0, 0, 0.6);
+            overflow: hidden;
+            will-change: transform;
+            contain: layout style paint;
+        `;
+        
+        const content = document.createElement('div');
+        content.style.cssText = `
+            font-size: ${fontSize}px;
+            opacity: ${danmuOpacity};
+            color: #ffffff;
+            padding: 4px 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        `;
+        
+        container.appendChild(content);
+        return { container, content };
+    },
+    returnElement: function(element) {
+        element.container.style.display = 'none';
+        this.elements.push(element);
+    }
+};
 
 // 初始化Danmaku弹幕库
 function initializeDanmaku() {
@@ -60,7 +99,7 @@ function initializeDanmaku() {
             container: danmuContainer,
             speed: danmuSpeed,
             opacity: danmuOpacity,
-            fontSize: fontSize,
+            fontSize: fontSize
             // 其他配置选项可以根据需要添加
         });
         // 设置初始字体大小类
@@ -1230,91 +1269,84 @@ function processMessage(data) {
 }
 // 显示弹幕
 function displayDanmu(roomId, platform, msgDto) {
-    if (!danmuVisible) return;
+        if (!danmuVisible || !danmaku) return;
     
     danmuCount++;
     updateCounters();
     
-    // 获取平台标签
     const platformLabel = getPlatformLabel(platform);
-    
-    // 获取备注信息
     const remark = config.remarkMap[roomId] || '';
     
-    // 使用Danmaku库显示弹幕
-    if (danmaku) {
-        // 创建外层容器
-        const containerElement = document.createElement('div');
-        containerElement.style.cssText = `
-            display: inline-block;
-            border-radius: 50px;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(4px);
-            overflow: hidden;
+    // 使用对象池获取元素
+    const danmakuElement = danmakuPool.getElement();
+    const { container, content } = danmakuElement;
+    
+    // 清空之前的内容
+    content.innerHTML = '';
+    
+    // 添加平台标签
+    if (platformLabel) {
+        const platformSpan = document.createElement('span');
+        platformSpan.className = 'platform-label';
+        platformSpan.style.cssText = `
+            background: ${platformLabel.color};
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.7em;
+            font-weight: bold;
+            line-height: 1;
+            flex-shrink: 0;
         `;
-        
-        // 创建内层内容容器
-        const danmuElement = document.createElement('div');
-        danmuElement.style.cssText = `
-            font-size: ${fontSize}px;
-            opacity: ${danmuOpacity};
-            color: #ffffff;
-            padding: 4px 12px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        `;
-        
-        // 添加平台标签 - 修改为圆角
-        if (platformLabel) {
-            const platformSpan = document.createElement('span');
-            platformSpan.className = 'platform-label';
-            platformSpan.style.cssText = `
-                background: ${platformLabel.color};
-                color: white;
-                padding: 2px 8px;
-                border-radius: 12px;
-                font-size: 0.7em;
-                font-weight: bold;
-                line-height: 1;
-            `;
-            platformSpan.textContent = platformLabel.text;
-            danmuElement.appendChild(platformSpan);
-        }
-        
-        // 添加备注（如果有）- 也修改为圆角保持一致性
-        if (remark) {
-            const remarkSpan = document.createElement('span');
-            remarkSpan.className = 'remark-label';
-            remarkSpan.style.cssText = `
-                background: #1a1a2e;
-                color: white;
-                padding: 2px 8px;
-                border-radius: 12px;
-                font-size: 0.7em;
-                font-weight: bold;
-                line-height: 1;
-            `;
-            remarkSpan.textContent = remark;
-            danmuElement.appendChild(remarkSpan);
-        }
-        
-        // 添加内容
-        const contentSpan = document.createElement('span');
-        contentSpan.className = 'content';
-        contentSpan.textContent = msgDto.content;
-        contentSpan.style.color = '#ffffff';
-        danmuElement.appendChild(contentSpan);
-        
-        // 组装元素
-        containerElement.appendChild(danmuElement);
-        
-        // 使用自定义渲染
-        danmaku.emit({
-            text: '',
-            render: () => containerElement
-        });
+        platformSpan.textContent = platformLabel.text;
+        content.appendChild(platformSpan);
     }
+    
+    // 添加备注
+    if (remark) {
+        const remarkSpan = document.createElement('span');
+        remarkSpan.className = 'remark-label';
+        remarkSpan.style.cssText = `
+            background: #1a1a2e;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.7em;
+            font-weight: bold;
+            line-height: 1;
+            flex-shrink: 0;
+        `;
+        remarkSpan.textContent = remark;
+        content.appendChild(remarkSpan);
+    }
+    
+    // 添加内容
+    const contentSpan = document.createElement('span');
+    contentSpan.className = 'content';
+    contentSpan.textContent = msgDto.content;
+    contentSpan.style.cssText = `
+        color: #ffffff;
+        flex-shrink: 0;
+        white-space: nowrap;
+    `;
+    content.appendChild(contentSpan);
+    
+    // 显示容器
+    container.style.display = 'inline-block';
+    
+    // 使用自定义渲染
+    danmaku.emit({
+        text: '',
+        render: () => container,
+        onFinish: () => {
+            // 弹幕结束后回收到对象池
+            setTimeout(() => {
+                danmakuPool.returnElement(danmakuElement);
+            }, 100);
+        }
+    });
+    
+    addMessageLog(roomId, platform, 'DANMU', msgDto);
 }
 
 // 根据平台获取标签信息和颜色

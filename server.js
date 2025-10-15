@@ -306,7 +306,7 @@ process.on('SIGINT', () => {
 });
 
 // 启动HTTP服务器
-const PORT = process.env.PORT || 8501;
+const PORT = process.env.PORT || 8601;
 server.listen(PORT, () => {
     console.log(`服务器运行在 http://localhost:${PORT}`);
 });
