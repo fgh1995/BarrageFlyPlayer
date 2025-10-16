@@ -4,7 +4,12 @@ const config = {
     currentTaskIds: [], // 当前管理的任务ID
     remarkMap: {} // 存储 roomId -> 备注 的映射关系
 };
-
+// 滚动控制变量
+let autoScrollEnabled = true;
+let userScrolling = false;
+let scrollTimeout = null;
+let newMessageIndicator = null;
+let pendingMessages = []; // 存储待显示的消息
 // 状态变量
 let danmuCount = 0;
 let messageCount = 0;
@@ -44,11 +49,235 @@ function init() {
     toggleAdminSettings(false);    // 初始化时隐藏管理员设置
     initializeMultiPlayers();
     initializeLogTabs(); // 初始化日志标签页
+    initializeScrollBehavior(); // 初始化滚动行为
 }
 // 初始化多播放器功能
 function initializeMultiPlayers() {
     setupPlayerEventListeners();
     loadPlayersFromStorage();
+}
+// 初始化滚动功能
+// 修改 initializeScrollBehavior 函数
+function initializeScrollBehavior() {
+    const allLog = document.getElementById('message-log-all');
+    const errorLog = document.getElementById('message-log-error');
+    const danmuLog = document.getElementById('message-log-danmu');
+    
+    [allLog, errorLog, danmuLog].forEach(log => {
+        if (log) {
+            setupScrollBehavior(log);
+        }
+    });
+    
+    // 创建新消息指示器
+    createNewMessageIndicator();
+    
+    // 监听标签页切换
+    document.querySelectorAll('.log-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            // 切换标签页时重置滚动状态
+            setTimeout(() => {
+                const activeLog = getActiveLogElement();
+                if (activeLog && isScrollAtBottom(activeLog)) {
+                    autoScrollEnabled = true;
+                    userScrolling = false;
+                    hideNewMessageIndicator();
+                }
+            }, 100);
+        });
+    });
+}
+// 设置滚动行为
+function setupScrollBehavior(logElement) {
+    if (!logElement) return;
+    
+    logElement.addEventListener('scroll', () => {
+        // 检查用户是否在手动滚动
+        const isAtBottom = isScrollAtBottom(logElement);
+        
+        if (!isAtBottom) {
+            // 用户向上滚动，禁用自动滚动
+            userScrolling = true;
+            autoScrollEnabled = false;
+            
+            // 如果有待处理消息，显示指示器
+            if (pendingMessages.length > 0) {
+                showNewMessageIndicator();
+            } else {
+                hideNewMessageIndicator();
+            }
+        } else {
+            // 用户滚动到底部，重新启用自动滚动
+            userScrolling = false;
+            autoScrollEnabled = true;
+            
+            // 如果有待处理消息，立即处理它们
+            if (pendingMessages.length > 0) {
+                processPendingMessages();
+            }
+            hideNewMessageIndicator();
+        }
+        
+        // 清除之前的超时
+        if (scrollTimeout) {
+            clearTimeout(scrollTimeout);
+        }
+        
+        // 设置超时，如果用户停止滚动一段时间，重新检查是否在底部
+        scrollTimeout = setTimeout(() => {
+            if (isScrollAtBottom(logElement)) {
+                userScrolling = false;
+                autoScrollEnabled = true;
+                
+                // 处理待处理消息
+                if (pendingMessages.length > 0) {
+                    processPendingMessages();
+                }
+                hideNewMessageIndicator();
+            }
+        }, 500);
+    });
+}
+
+// 检查是否滚动到底部
+function isScrollAtBottom(element) {
+    const threshold = 10; // 像素阈值，允许一定的误差
+    return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold;
+}
+
+// 滚动到底部
+function scrollToBottom(logElement) {
+    if (!logElement) return;
+    
+    logElement.scrollTop = logElement.scrollHeight;
+}
+
+// 智能滚动
+// 修改智能滚动函数
+function smartScroll(logElement) {
+    if (!logElement) return;
+    
+    if (autoScrollEnabled && !userScrolling) {
+        // 自动滚动到底部
+        scrollToBottom(logElement);
+        hideNewMessageIndicator();
+    } else if (pendingMessages.length > 0) {
+        // 显示新消息指示器
+        showNewMessageIndicator();
+    }
+}
+
+// 创建新消息指示器
+// 修改新消息指示器的点击事件
+function createNewMessageIndicator() {
+    const allLog = document.getElementById('message-log-all');
+    if (!allLog) return;
+    
+    // 创建指示器
+    newMessageIndicator = document.createElement('div');
+    newMessageIndicator.className = 'new-message-indicator';
+    newMessageIndicator.innerHTML = `
+        <span>${pendingMessages.length} 条新消息</span>
+        <i class="fas fa-arrow-down"></i>
+    `;
+    newMessageIndicator.style.cssText = `
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--primary-color);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        cursor: pointer;
+        display: none;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.9rem;
+        z-index: 10;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        transition: all 0.3s ease;
+    `;
+    
+    newMessageIndicator.addEventListener('click', () => {
+        // 点击指示器，处理所有待处理消息并滚动到底部
+        processPendingMessages();
+        autoScrollEnabled = true;
+        userScrolling = false;
+    });
+    
+    newMessageIndicator.addEventListener('mouseenter', () => {
+        newMessageIndicator.style.transform = 'translateX(-50%) scale(1.05)';
+    });
+    
+    newMessageIndicator.addEventListener('mouseleave', () => {
+        newMessageIndicator.style.transform = 'translateX(-50%) scale(1)';
+    });
+    
+    // 添加到日志容器
+    const logContainer = allLog.parentElement;
+    if (logContainer) {
+        logContainer.style.position = 'relative';
+        logContainer.appendChild(newMessageIndicator);
+    }
+}
+
+// 显示新消息指示器
+function showNewMessageIndicator() {
+    if (newMessageIndicator && !autoScrollEnabled) {
+        // 更新指示器文本显示消息数量
+        newMessageIndicator.innerHTML = `
+            <span>${pendingMessages.length} 条新消息</span>
+            <i class="fas fa-arrow-down"></i>
+        `;
+        newMessageIndicator.style.display = 'flex';
+    }
+}
+
+// 隐藏新消息指示器
+function hideNewMessageIndicator() {
+    if (newMessageIndicator) {
+        newMessageIndicator.style.display = 'none';
+    }
+}
+
+// 获取当前活动的日志元素
+function getActiveLogElement() {
+    const activeLog = document.querySelector('.message-log.active');
+    return activeLog;
+}
+// 处理待处理的消息
+function processPendingMessages() {
+    if (pendingMessages.length === 0) return;
+    
+    const allLog = document.getElementById('message-log-all');
+    const danmuLog = document.getElementById('message-log-danmu');
+    const errorLog = document.getElementById('message-log-error');
+    
+    pendingMessages.forEach(messageData => {
+        switch (messageData.type) {
+            case 'system':
+                appendMessageToLogs(messageData);
+                break;
+            case 'danmu':
+                appendDanmuMessageToLog(messageData);
+                break;
+            default:
+                appendMessageToAllLog(messageData);
+                break;
+        }
+    });
+    
+    // 清空待处理队列
+    pendingMessages = [];
+    
+    // 滚动到底部
+    const activeLog = getActiveLogElement();
+    if (activeLog) {
+        scrollToBottom(activeLog);
+    }
+    
+    hideNewMessageIndicator();
 }
 // 弹幕对象池
 const danmakuPool = {
@@ -657,27 +886,32 @@ function setupEventListeners() {
     
     // 清空日志
     if (clearLogBtn) {
-        clearLogBtn.addEventListener('click', () => {
-            if (currentLogTab === 'all') {
-                // 清空所有日志
-                if (document.getElementById('message-log-all')) {
-                    document.getElementById('message-log-all').innerHTML = '';
-                }
-                if (document.getElementById('message-log-error')) {
-                    document.getElementById('message-log-error').innerHTML = '';
-                }
-                messageCount = 0;
-                errorMessageCount = 0;
-            } else {
-                // 只清空错误日志
-                if (document.getElementById('message-log-error')) {
-                    document.getElementById('message-log-error').innerHTML = '';
-                }
-                errorMessageCount = 0;
+    clearLogBtn.addEventListener('click', () => {
+        if (currentLogTab === 'all') {
+            // 清空所有日志
+            if (document.getElementById('message-log-all')) {
+                document.getElementById('message-log-all').innerHTML = '';
             }
-            addSystemMessage('已清空消息日志');
-        });
-    }
+            if (document.getElementById('message-log-error')) {
+                document.getElementById('message-log-error').innerHTML = '';
+            }
+            messageCount = 0;
+            errorMessageCount = 0;
+        } else {
+            // 只清空错误日志
+            if (document.getElementById('message-log-error')) {
+                document.getElementById('message-log-error').innerHTML = '';
+            }
+            errorMessageCount = 0;
+        }
+        
+        // 清空待处理消息
+        pendingMessages = [];
+        hideNewMessageIndicator();
+        
+        addSystemMessage('已清空消息日志');
+    });
+}
     
     // 显示/隐藏弹幕
     if (toggleDanmuBtn) {
@@ -1434,7 +1668,7 @@ function displayGift(roomId, platform, msgDto) {
         });
     }
 }
-// 添加消息到日志
+// 修改 addMessageLog 函数
 function addMessageLog(roomId, platform, type, msgDto) {
     const allLog = document.getElementById('message-log-all');
     const danmuLog = document.getElementById('message-log-danmu');
@@ -1446,62 +1680,107 @@ function addMessageLog(roomId, platform, type, msgDto) {
     let remarkText = remark ? `[${remark}] ` : '';
     
     let content = `[房间 ${roomId}] ${remarkText}`;
-    let messageElement = document.createElement('div');
     
     if (type === 'DANMU') {
-        messageElement.className = 'message message-danmu';
         if (msgDto.badgeLevel && msgDto.badgeLevel !== 0) {
             content += `[${msgDto.badgeLevel}${msgDto.badgeName}] `;
         }
         content += `${msgDto.username}: ${msgDto.content}`;
         
-        // 添加到弹幕日志
-        const danmuElement = messageElement.cloneNode(true);
-        danmuElement.textContent = content;
-        danmuLog.appendChild(danmuElement);
+        const messageData = {
+            type: 'danmu',
+            content: content,
+            roomId: roomId,
+            platform: platform,
+            originalData: msgDto
+        };
         
-    } else {
-        messageElement.className = 'message message-gift';
-        if (msgDto.badgeLevel && msgDto.badgeLevel !== 0) {
-            content += `[${msgDto.badgeLevel}${msgDto.badgeName}] `;
+        if (autoScrollEnabled && !userScrolling) {
+            // 直接添加到弹幕日志
+            appendDanmuMessageToLog(messageData);
+            smartScroll(danmuLog);
+        } else {
+            // 加入待处理队列
+            pendingMessages.push(messageData);
+            showNewMessageIndicator();
         }
-        content += `${msgDto.username} ${msgDto.data?.action || "赠送"} ${msgDto.giftName} × ${msgDto.giftCount}`;
     }
     
-    // 添加到所有日志
-    messageElement.textContent = content;
-    allLog.appendChild(messageElement);
+    // 添加到所有日志（无论是否自动滚动）
+    const messageDataAll = {
+        type: type.toLowerCase(),
+        content: content,
+        roomId: roomId,
+        platform: platform,
+        originalData: msgDto
+    };
     
-    // 限制消息数量
-    messageCount++;
-    if (messageCount > 200) {
-        allLog.removeChild(allLog.firstChild);
-        messageCount--;
-    }
-    
-    // 限制弹幕日志数量
-    const danmuMessages = danmuLog.querySelectorAll('.message');
-    if (danmuMessages.length > 200) {
-        danmuLog.removeChild(danmuMessages[0]);
+    if (autoScrollEnabled && !userScrolling) {
+        appendMessageToAllLog(messageDataAll);
+        smartScroll(allLog);
+    } else {
+        // 对于所有日志也使用相同的逻辑
+        if (!pendingMessages.some(msg => 
+            msg.type === messageDataAll.type && 
+            msg.content === messageDataAll.content
+        )) {
+            pendingMessages.push(messageDataAll);
+            showNewMessageIndicator();
+        }
     }
 }
 
-// 添加系统消息
+// 修改 addSystemMessage 函数
 function addSystemMessage(text, isError = false) {
     const allLog = document.getElementById('message-log-all');
     const errorLog = document.getElementById('message-log-error');
     
     if (!allLog) return;
     
-    const messageElement = document.createElement('div');
-    messageElement.className = isError ? 'message message-error' : 'message message-system';
-    messageElement.textContent = `[系统] ${new Date().toLocaleTimeString()} - ${text}`;
+    const messageData = {
+        type: 'system',
+        text: text,
+        isError: isError,
+        timestamp: new Date().toLocaleTimeString()
+    };
     
-    // 添加到所有日志
+    if (autoScrollEnabled && !userScrolling) {
+        // 如果自动滚动启用，直接添加消息
+        appendMessageToLogs(messageData);
+        smartScroll(allLog);
+    } else {
+        // 如果用户正在查看历史消息，将消息加入待处理队列
+        pendingMessages.push(messageData);
+        showNewMessageIndicator();
+    }
+    
+    // 限制所有消息数量
+    messageCount++;
+    if (messageCount > 200) {
+        // 从DOM中移除最旧的消息
+        const firstMessage = allLog.firstChild;
+        if (firstMessage) {
+            allLog.removeChild(firstMessage);
+            messageCount--;
+        }
+    }
+}
+
+// 将消息实际添加到日志的函数
+function appendMessageToLogs(messageData) {
+    const allLog = document.getElementById('message-log-all');
+    const errorLog = document.getElementById('message-log-error');
+    
+    if (!allLog) return;
+    
+    const messageElement = document.createElement('div');
+    messageElement.className = messageData.isError ? 'message message-error' : 'message message-system';
+    messageElement.textContent = `[系统] ${messageData.timestamp} - ${messageData.text}`;
+    
     allLog.appendChild(messageElement);
     
     // 如果是错误消息，也添加到错误日志
-    if (isError && errorLog) {
+    if (messageData.isError && errorLog) {
         const errorElement = messageElement.cloneNode(true);
         errorLog.appendChild(errorElement);
         errorMessageCount++;
@@ -1512,22 +1791,35 @@ function addSystemMessage(text, isError = false) {
             errorMessageCount--;
         }
     }
+}
+// 添加弹幕消息到弹幕日志
+function appendDanmuMessageToLog(messageData) {
+    const danmuLog = document.getElementById('message-log-danmu');
+    if (!danmuLog) return;
     
-    // 自动滚动到底部
-    // allLog.scrollTop = allLog.scrollHeight;
-    // if (isError && errorLog) {
-    //     errorLog.scrollTop = errorLog.scrollHeight;
-    // }
+    const messageElement = document.createElement('div');
+    messageElement.className = 'message message-danmu';
+    messageElement.textContent = messageData.content;
     
-    // 限制所有消息数量
-    messageCount++;
-    if (messageCount > 200) {
-        allLog.removeChild(allLog.firstChild);
-        messageCount--;
+    danmuLog.appendChild(messageElement);
+    
+    // 限制弹幕日志数量
+    const danmuMessages = danmuLog.querySelectorAll('.message');
+    if (danmuMessages.length > 200) {
+        danmuLog.removeChild(danmuMessages[0]);
     }
 }
-
-
+// 添加消息到所有日志
+function appendMessageToAllLog(messageData) {
+    const allLog = document.getElementById('message-log-all');
+    if (!allLog) return;
+    
+    const messageElement = document.createElement('div');
+    messageElement.className = `message message-${messageData.type}`;
+    messageElement.textContent = messageData.content;
+    
+    allLog.appendChild(messageElement);
+}
 // 新增 Toast 消息函数 - 居中显示
 function showToast(message, type = 'info', duration = 3000) {
     const toastContainer = document.getElementById('toast-container');

@@ -11,7 +11,7 @@ npm install
 ```shell
 const ADMIN_PASSWORD = "123"; // 默认管理员密码
 ```
-## 3 运行查看效果，默认端口：8501
+## 3 运行查看效果，默认端口：8601
 
 ```shell
 node server.js

@@ -62,7 +62,51 @@ section {
     background: rgba(0, 0, 0, 0.2);
     border-radius: var(--border-radius);
 }
+/* 新消息指示器样式 */
+.new-message-indicator {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--primary-color);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    z-index: 10;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+}
 
+.new-message-indicator:hover {
+    background: #3a8bc8;
+    transform: translateX(-50%) scale(1.05);
+}
+
+.new-message-indicator i {
+    font-size: 0.8rem;
+}
+
+/* 确保日志容器有相对定位 */
+.message-log-container {
+    position: relative;
+    height: 200px;
+}
+
+.message-log {
+    height: 100%;
+    overflow-y: auto;
+    padding: 15px var(--section-padding);
+    display: none;
+}
+
+.message-log.active {
+    display: block;
+}
 h1 {
     font-size: 2.5rem;
     margin-bottom: 10px;
