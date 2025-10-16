@@ -170,6 +170,9 @@
                         <button class="log-tab active" data-tab="all">所有日志</button>
                         <button class="log-tab" data-tab="error">错误日志</button>
                         <button class="log-tab" data-tab="danmu">弹幕日志</button>
+                        <button id="toggle-floating-log" class="log-float-btn" title="悬浮显示弹幕日志">
+                            📢 悬浮显示
+                        </button>
                     </div>
                     <button id="clear-log-btn" class="btn-small btn-warning">清空日志</button>
                 </div>
@@ -186,13 +189,28 @@
                 </div>
             </div>
         </section>
-
+        <div id="floating-danmu-log" class="floating-danmu-log">
+            <div class="floating-log-header" id="floating-log-header">
+                <span class="floating-log-title">📢 实时弹幕日志</span>
+                <div class="floating-log-controls">
+                    <button id="minimize-floating-log" title="最小化">−</button>
+                    <button id="close-floating-log" title="关闭">×</button>
+                </div>
+            </div>
+            <div class="floating-log-content" id="floating-log-content">
+                <!-- 悬浮日志内容将在这里显示 -->
+            </div>
+            <!-- 大小调整手柄 -->
+            <div class="floating-log-resize-handle floating-log-resize-right"></div>
+            <div class="floating-log-resize-handle floating-log-resize-bottom"></div>
+            <div class="floating-log-resize-handle floating-log-resize-bottom-right"></div>
+        </div>
         <!-- 底部状态栏 -->
         <footer class="footer-bar">
             <div class="footer-info">
                 <span>服务器: <span id="server-url">未设置</span></span>
                 <span>任务: <span id="task-ids">无</span></span>
-                <span>版本: v1.4.2</span>
+                <span>版本: v1.4.3</span>
             </div>
             <div class="footer-links">
                 <a href="https://github.com/OrdinaryRoad-Project/ordinaryroad-barrage-fly" target="_blank">Barrage Fly</a>

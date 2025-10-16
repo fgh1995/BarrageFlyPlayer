@@ -20,6 +20,11 @@ let danmuVisible = true;
 let adminSettingsOpen = false;
 let currentLogTab = 'all'; // 当前日志标签页
 let errorMessageCount = 0;
+// 悬浮日志相关变量
+let floatingLog = null;
+let floatingLogContent = null;
+let isFloatingLogVisible = false;
+let isFloatingLogMinimized = false;
 // Danmaku 实例
 let danmaku = null;
 let adminPassword = "";
@@ -50,6 +55,7 @@ function init() {
     initializeMultiPlayers();
     initializeLogTabs(); // 初始化日志标签页
     initializeScrollBehavior(); // 初始化滚动行为
+    initializeFloatingLog();// 新增：初始化悬浮日志
 }
 // 初始化多播放器功能
 function initializeMultiPlayers() {
@@ -781,6 +787,11 @@ function setupEventListeners() {
     if (!speedControl || !opacityControl || !fontSizeControl) {
         console.error('控件元素未找到');
         return;
+    }
+    // 悬浮日志按钮
+    const toggleFloatingLogBtn = document.getElementById('toggle-floating-log');
+    if (toggleFloatingLogBtn) {
+        toggleFloatingLogBtn.addEventListener('click', toggleFloatingLog);
     }
     setDanmuArea('third'); // 默认弹幕区域1/3
     // 打开/关闭设置按钮
@@ -1676,7 +1687,7 @@ function addMessageLog(roomId, platform, type, msgDto) {
     const remark = config.remarkMap[roomId] || '';
     let remarkText = remark ? `[${remark}] ` : '';
     
-    let content = `[房间 ${roomId}] ${remarkText}`;
+    let content = ``;
     if (type === 'DANMU') {
         if (msgDto.badgeLevel && msgDto.badgeLevel !== 0) {
             content += `[${msgDto.badgeLevel}${msgDto.badgeName}] `;
@@ -1698,6 +1709,18 @@ function addMessageLog(roomId, platform, type, msgDto) {
             // 加入待处理队列
             pendingMessages.push(messageData);
             showNewMessageIndicator();
+        }
+        // 添加到悬浮日志（如果是弹幕消息）
+        if (type === 'DANMU' && isFloatingLogVisible) {
+            const messageData = {
+                type: 'danmu',
+                content: `${msgDto.username}: ${msgDto.content}`,
+                roomId: roomId,
+                platform: platform,
+                remarkText: remarkText,
+                originalData: msgDto
+            };
+            appendToFloatingLog(messageData);
         }
     }
     
@@ -1794,8 +1817,26 @@ function appendDanmuMessageToLog(messageData) {
     
     const messageElement = document.createElement('div');
     messageElement.className = 'message message-danmu';
-    messageElement.textContent = messageData.content;
     
+    // 添加平台数据属性
+    if (messageData.platform) {
+        messageElement.setAttribute('data-platform', messageData.platform.toLowerCase());
+    }
+    
+    // 构建带样式的弹幕内容
+    const platformLabel = getPlatformLabel(messageData.platform);
+    const remark = config.remarkMap[messageData.roomId] || '';
+    
+    let contentHTML = '';
+    
+    // 添加平台标签
+    if (platformLabel) {
+        contentHTML += `<span class="platform-label" style="background: ${platformLabel.color}; color: white; border-radius: 12px; padding: 2px 8px; font-size: 1.0em; font-weight: bold; margin-right: 6px; display: inline-block; line-height: 1;">平台：${platformLabel.text} 房间号：${messageData.roomId}${remark.trim() ? ` 备注：${remark}` : ''}</span> `;
+    }
+    // 添加弹幕内容
+    contentHTML += `<span class="content">${messageData.content}</span>`;
+    
+    messageElement.innerHTML = contentHTML;
     danmuLog.appendChild(messageElement);
     
     // 限制弹幕日志数量
@@ -1990,6 +2031,340 @@ function isValidWebSocketURL(url) {
         return true;
     } catch (error) {
         return false;
+    }
+}
+// 初始化悬浮日志
+function initializeFloatingLog() {
+    floatingLog = document.getElementById('floating-danmu-log');
+    floatingLogContent = document.getElementById('floating-log-content');
+    
+    if (!floatingLog || !floatingLogContent) return;
+    
+    // 设置拖拽功能
+    setupFloatingLogDrag();
+    
+    // 设置大小调整功能
+    setupFloatingLogResize();
+    
+    // 设置事件监听
+    setupFloatingLogEvents();
+    
+    // 从本地存储恢复状态
+    loadFloatingLogState();
+}
+
+// 设置悬浮日志拖拽功能
+function setupFloatingLogDrag() {
+    const header = document.getElementById('floating-log-header');
+    if (!header || !floatingLog) return;
+    
+    let isDragging = false;
+    let dragOffset = { x: 0, y: 0 };
+    
+    header.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.floating-log-controls')) return;
+        
+        isDragging = true;
+        const rect = floatingLog.getBoundingClientRect();
+        dragOffset.x = e.clientX - rect.left;
+        dragOffset.y = e.clientY - rect.top;
+        
+        floatingLog.style.transition = 'none';
+        document.body.style.userSelect = 'none';
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        
+        const x = e.clientX - dragOffset.x;
+        const y = e.clientY - dragOffset.y;
+        
+        // 限制在窗口范围内
+        const maxX = window.innerWidth - floatingLog.offsetWidth;
+        const maxY = window.innerHeight - floatingLog.offsetHeight;
+        
+        floatingLog.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
+        floatingLog.style.top = Math.max(0, Math.min(y, maxY)) + 'px';
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            floatingLog.style.transition = '';
+            document.body.style.userSelect = '';
+            saveFloatingLogState();
+        }
+    });
+}
+
+// 设置悬浮日志事件
+function setupFloatingLogEvents() {
+    const closeBtn = document.getElementById('close-floating-log');
+    const minimizeBtn = document.getElementById('minimize-floating-log');
+    
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            closeFloatingLog();
+        });
+    }
+    
+    if (minimizeBtn) {
+        minimizeBtn.addEventListener('click', () => {
+            toggleFloatingLogMinimize();
+        });
+    }
+}
+
+// 切换悬浮日志显示/隐藏
+function toggleFloatingLog() {
+    if (!floatingLog) return;
+    
+    if (isFloatingLogVisible) {
+        closeFloatingLog();
+    } else {
+        openFloatingLog();
+    }
+}
+
+// 打开悬浮日志
+// 打开悬浮日志
+function openFloatingLog() {
+    if (!floatingLog) return;
+    
+    floatingLog.classList.add('active');
+    isFloatingLogVisible = true;
+    
+    // 设置默认尺寸（如果之前没有保存过）
+    if (!floatingLog.style.width || !floatingLog.style.height) {
+        floatingLog.style.width = '400px';
+        floatingLog.style.height = '500px';
+    }
+    
+    // 标记原生日志容器
+    const logContainer = document.querySelector('.message-log-container');
+    if (logContainer) {
+        logContainer.classList.add('floating');
+    }
+    
+    saveFloatingLogState();
+    updateFloatingButtonText();
+}
+
+// 关闭悬浮日志
+function closeFloatingLog() {
+    if (!floatingLog) return;
+    
+    floatingLog.classList.remove('active');
+    isFloatingLogVisible = false;
+    isFloatingLogMinimized = false;
+    
+    // 恢复原生日志容器
+    const logContainer = document.querySelector('.message-log-container');
+    if (logContainer) {
+        logContainer.classList.remove('floating');
+    }
+    
+    saveFloatingLogState();
+    updateFloatingButtonText();
+}
+
+// 修改切换悬浮日志最小化的函数
+function toggleFloatingLogMinimize() {
+    if (!floatingLog) return;
+    
+    isFloatingLogMinimized = !isFloatingLogMinimized;
+    
+    if (isFloatingLogMinimized) {
+        floatingLog.classList.add('minimized');
+        floatingLogContent.style.display = 'none';
+    } else {
+        floatingLog.classList.remove('minimized');
+        floatingLogContent.style.display = 'block';
+    }
+    
+    saveFloatingLogState();
+}
+
+// 添加消息到悬浮日志
+function appendToFloatingLog(messageData) {
+    if (!floatingLogContent || !isFloatingLogVisible) return;
+    
+    const messageElement = document.createElement('div');
+    messageElement.className = `message message-${messageData.type}`;
+    
+    // 只为弹幕消息添加平台样式
+    if (messageData.type === 'danmu' && messageData.platform) {
+        messageElement.setAttribute('data-platform', messageData.platform.toLowerCase());
+        
+        const platformLabel = getPlatformLabel(messageData.platform);
+        const remark = config.remarkMap[messageData.roomId] || '';
+        
+        let contentHTML = '';
+        
+        if (platformLabel) {
+            contentHTML += `<span class="platform-label" style="background: ${platformLabel.color}">${platformLabel.text} ${remark}</span> `;
+        }
+
+        contentHTML += `<span class="content">${messageData.content || messageData.text}</span>`;
+        messageElement.innerHTML = contentHTML;
+    } else {
+        messageElement.textContent = messageData.content || messageData.text;
+    }
+    
+    floatingLogContent.appendChild(messageElement);
+    
+    // 自动滚动到底部
+    if (!isFloatingLogMinimized) {
+        floatingLogContent.scrollTop = floatingLogContent.scrollHeight;
+    }
+    
+    // 限制消息数量
+    const messages = floatingLogContent.querySelectorAll('.message');
+    if (messages.length > 200) {
+        floatingLogContent.removeChild(messages[0]);
+    }
+}
+
+// 保存悬浮日志状态到本地存储
+function saveFloatingLogState() {
+    if (!floatingLog) return;
+    
+    const state = {
+        visible: isFloatingLogVisible,
+        minimized: isFloatingLogMinimized,
+        position: {
+            left: floatingLog.style.left,
+            top: floatingLog.style.top
+        },
+        size: {
+            width: floatingLog.style.width,
+            height: floatingLog.style.height
+        }
+    };
+    
+    localStorage.setItem('floatingLogState', JSON.stringify(state));
+}
+// 从本地存储加载悬浮日志状态
+// 修改加载悬浮日志状态的函数
+function loadFloatingLogState() {
+    const savedState = localStorage.getItem('floatingLogState');
+    if (savedState) {
+        try {
+            const state = JSON.parse(savedState);
+            
+            if (state.visible) {
+                openFloatingLog();
+                
+                if (state.position && state.position.left && state.position.top) {
+                    floatingLog.style.left = state.position.left;
+                    floatingLog.style.top = state.position.top;
+                }
+                
+                if (state.size && state.size.width && state.size.height) {
+                    floatingLog.style.width = state.size.width;
+                    floatingLog.style.height = state.size.height;
+                }
+                
+                if (state.minimized) {
+                    toggleFloatingLogMinimize();
+                }
+            }
+        } catch (error) {
+            console.error('加载悬浮日志状态失败:', error);
+        }
+    }
+}
+// 更新悬浮按钮文本
+function updateFloatingButtonText() {
+    const toggleFloatingLogBtn = document.getElementById('toggle-floating-log');
+    if (toggleFloatingLogBtn) {
+        if (isFloatingLogVisible) {
+            toggleFloatingLogBtn.textContent = '📢 还原显示';
+            toggleFloatingLogBtn.title = '还原到原生日志区域';
+        } else {
+            toggleFloatingLogBtn.textContent = '📢 悬浮显示';
+            toggleFloatingLogBtn.title = '悬浮显示弹幕日志';
+        }
+    }
+}
+// 设置悬浮日志大小调整功能
+function setupFloatingLogResize() {
+    const floatingLog = document.getElementById('floating-danmu-log');
+    if (!floatingLog) return;
+
+    const resizeRight = floatingLog.querySelector('.floating-log-resize-right');
+    const resizeBottom = floatingLog.querySelector('.floating-log-resize-bottom');
+    const resizeBottomRight = floatingLog.querySelector('.floating-log-resize-bottom-right');
+
+    let isResizing = false;
+    let resizeDirection = '';
+    let startX, startY, startWidth, startHeight;
+
+    function startResize(e, direction) {
+        e.preventDefault();
+        isResizing = true;
+        resizeDirection = direction;
+        
+        startX = e.clientX;
+        startY = e.clientY;
+        startWidth = parseInt(document.defaultView.getComputedStyle(floatingLog).width, 10);
+        startHeight = parseInt(document.defaultView.getComputedStyle(floatingLog).height, 10);
+        
+        floatingLog.style.transition = 'none';
+        document.body.style.userSelect = 'none';
+        
+        document.addEventListener('mousemove', handleResize);
+        document.addEventListener('mouseup', stopResize);
+    }
+
+    function handleResize(e) {
+        if (!isResizing) return;
+        
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        
+        let newWidth = startWidth;
+        let newHeight = startHeight;
+
+        if (resizeDirection.includes('right')) {
+            newWidth = startWidth + dx;
+        }
+        
+        if (resizeDirection.includes('bottom')) {
+            newHeight = startHeight + dy;
+        }
+
+        // 应用尺寸限制
+        newWidth = Math.max(300, Math.min(newWidth, window.innerWidth * 2.0));
+        newHeight = Math.max(200, Math.min(newHeight, window.innerHeight * 2.0));
+
+        floatingLog.style.width = newWidth + 'px';
+        floatingLog.style.height = newHeight + 'px';
+    }
+
+    function stopResize() {
+        isResizing = false;
+        floatingLog.style.transition = '';
+        document.body.style.userSelect = '';
+        
+        document.removeEventListener('mousemove', handleResize);
+        document.removeEventListener('mouseup', stopResize);
+        
+        // 保存调整后的尺寸
+        saveFloatingLogState();
+    }
+
+    // 绑定事件
+    if (resizeRight) {
+        resizeRight.addEventListener('mousedown', (e) => startResize(e, 'right'));
+    }
+    
+    if (resizeBottom) {
+        resizeBottom.addEventListener('mousedown', (e) => startResize(e, 'bottom'));
+    }
+    
+    if (resizeBottomRight) {
+        resizeBottomRight.addEventListener('mousedown', (e) => startResize(e, 'bottom-right'));
     }
 }
 // 初始化应用
