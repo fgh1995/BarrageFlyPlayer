@@ -1367,7 +1367,6 @@ function setupSocketListeners() {
     });
 
     socket.on('current-barrage-fly-ws-connect', (newisBarrageFlyWSConnect,barrageFlyWSUrl) => {
-        console.log('newisBarrageFlyWSConnect->' + newisBarrageFlyWSConnect);
         isBarrageFlyWSConnect = newisBarrageFlyWSConnect;
         barrageflyWsInput.value = barrageFlyWSUrl;
         if(isBarrageFlyWSConnect){
@@ -1579,8 +1578,6 @@ function displayDanmu(roomId, platform, msgDto) {
             }, 100);
         }
     });
-    
-    addMessageLog(roomId, platform, 'DANMU', msgDto);
 }
 
 // 根据平台获取标签信息和颜色
@@ -1680,13 +1677,11 @@ function addMessageLog(roomId, platform, type, msgDto) {
     let remarkText = remark ? `[${remark}] ` : '';
     
     let content = `[房间 ${roomId}] ${remarkText}`;
-    
     if (type === 'DANMU') {
         if (msgDto.badgeLevel && msgDto.badgeLevel !== 0) {
             content += `[${msgDto.badgeLevel}${msgDto.badgeName}] `;
         }
         content += `${msgDto.username}: ${msgDto.content}`;
-        
         const messageData = {
             type: 'danmu',
             content: content,
