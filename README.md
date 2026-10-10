@@ -1,3 +1,5 @@
+## BarrageFly项目已经删库并售出，已停止更新，因此本项目也停止更新
+
 ## 相关链接
 
 - https://rsocket.io/guides/rsocket-js
