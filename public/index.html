@@ -13,6 +13,12 @@
         .admin-setting {
             display: none; /* 默认隐藏管理员设置 */
         }
+        .control-item .btn-small {
+            margin-right: 4px;
+        }
+        .control-item .btn-small:last-child {
+            margin-right: 0;
+        }
     </style>
 </head>
 <body>
@@ -85,9 +91,11 @@
                 <div class="main-player-section">
                     <div class="section-header">
                         <h3>主视角</h3>
+                        <button id="fake-fullscreen-btn" class="btn-small btn-primary">假全屏</button>
                     </div>
                     <div class="player-container main-player">
-                        <div class="player-content">
+                        <div id="fake-fullscreen-mask"></div>
+                        <div class="player-content" id="main-player-content">
                             <div id="dplayer"></div>
                             <div class="danmu-container" id="danmu-container"></div>
                         </div>
@@ -136,8 +144,32 @@
                             <input type="range" id="font-size-control" min="12" max="40" value="20" step="1">
                         </div>
                         <div class="control-item">
+                            <label>视频比例</label>
+                            <div class="aspect-ratio-input-group">
+                                <input type="text" id="aspect-ratio-input" placeholder="如: 16:9, 2.52:1, 4:3">
+                                <button id="apply-aspect-ratio" class="btn-small btn-primary">应用</button>
+                            </div>
+                        </div>
+                        <div class="control-item">
                             <button id="toggle-danmu-btn" class="btn-secondary">隐藏弹幕</button>
                             <button id="clear-btn" class="btn-warning">清空弹幕</button>
+                        </div>
+                    </div>
+
+                    <!-- 屏蔽词控制 - 独立成一行，加宽 -->
+                    <div class="block-words-section">
+                        <div class="block-words-header">
+                            <label>屏蔽词 (用 <code>|</code> 分隔)</label>
+                            <div class="block-words-actions">
+                                <button id="clear-block-words" class="btn-small btn-secondary">清空屏蔽词</button>
+                            </div>
+                        </div>
+                        <div class="block-words-input-group">
+                            <input type="text" id="block-word-input" placeholder="输入要屏蔽的词，多个词用 | 分隔，例如: 广告|垃圾|色情|政治" value="">
+                            <button id="apply-block-words" class="btn-warning">应用屏蔽词</button>
+                        </div>
+                        <div class="block-words-status" id="block-words-status">
+                            当前屏蔽词: <span id="block-words-list-display">无</span>
                         </div>
                     </div>
                 </div>
@@ -210,7 +242,7 @@
             <div class="footer-info">
                 <span>服务器: <span id="server-url">未设置</span></span>
                 <span>任务: <span id="task-ids">无</span></span>
-                <span>版本: v1.4.3</span>
+                <span>版本: v1.4.4</span>
             </div>
             <div class="footer-links">
                 <a href="https://github.com/OrdinaryRoad-Project/ordinaryroad-barrage-fly" target="_blank">Barrage Fly</a>

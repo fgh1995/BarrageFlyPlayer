@@ -9,6 +9,7 @@
     "server": "node server.js"
   },
   "dependencies": {
+    "douyudm": "^3.0.7",
     "express": "^5.1.0",
     "rsocket-core": "^0.0.27",
     "rsocket-flowable": "^0.0.27",
@@ -16,7 +17,11 @@
     "socket.io": "^4.8.1",
     "ws": "^8.14.2"
   },
-  "keywords": ["danmu", "websocket", "live-streaming"],
+  "keywords": [
+    "danmu",
+    "websocket",
+    "live-streaming"
+  ],
   "author": "Your Name",
   "license": "MIT"
 }

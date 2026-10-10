@@ -302,6 +302,63 @@ button {
     height: 100%;
 }
 
+.dplayer-video-wrap {
+    aspect-ratio: var(--custom-aspect-ratio, unset);
+}
+
+.dplayer-video-wrap video {
+    object-fit: var(--custom-object-fit, contain);
+}
+
+#fake-fullscreen-mask {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+    z-index: 9998;
+}
+
+body.fake-fullscreen-active {
+    overflow: hidden;
+}
+
+.player-container.main-player.in-fake-fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+}
+
+#main-player-content.fake-fullscreen {
+    position: fixed;
+    left: 0;
+    width: 100vw;
+    z-index: 9999;
+    background: transparent;
+}
+
+#main-player-content.fake-fullscreen.aspect-ratio-based {
+    top: 0;
+}
+
+#main-player-content.fake-fullscreen:not(.aspect-ratio-based) {
+    top: 0;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#main-player-content.fake-fullscreen #dplayer {
+    width: 100%;
+    height: 100%;
+}
+
 /* Danmu Container */
 .danmu-container {
     position: absolute !important;
@@ -422,6 +479,26 @@ button {
 .control-item label {
     color: var(--text-secondary);
     font-size: 0.9rem;
+}
+
+.aspect-ratio-input-group {
+    display: flex;
+    gap: 8px;
+}
+
+.aspect-ratio-input-group input {
+    flex: 1;
+    padding: 6px 12px;
+    border-radius: var(--border-radius);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.3);
+    color: white;
+    font-size: 0.9rem;
+}
+
+.aspect-ratio-input-group input:focus {
+    outline: none;
+    border-color: var(--primary-color);
 }
 
 /* Task Management */
@@ -1367,5 +1444,131 @@ button.active {
     .message-log-danmu .remark-label {
         font-size: 0.65em;
         padding: 1px 6px;
+    }
+}
+/* ============================================
+   屏蔽词控制 - 独立成行样式
+   ============================================ */
+
+.block-words-section {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    width: 100%;
+}
+
+.block-words-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.block-words-header label {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.block-words-header code {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    color: var(--primary-color);
+}
+
+.block-words-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.block-words-input-group {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+}
+
+.block-words-input-group input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: var(--border-radius);
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--text-primary);
+    font-size: 14px;
+    min-width: 0;
+    width: 100%;
+}
+
+.block-words-input-group input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.block-words-input-group input::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.block-words-input-group .btn-warning {
+    padding: 10px 20px;
+    white-space: nowrap;
+    background: var(--warning-color);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-weight: 500;
+    transition: var(--transition);
+}
+
+.block-words-input-group .btn-warning:hover {
+    background: #d97706;
+    transform: translateY(-1px);
+}
+
+.block-words-status {
+    margin-top: 8px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    padding: 6px 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--border-radius);
+    min-height: 32px;
+    word-break: break-all;
+}
+
+.block-words-status #block-words-list-display {
+    color: var(--primary-color);
+    font-weight: 500;
+}
+
+.block-words-status .no-words {
+    color: var(--text-secondary);
+    opacity: 0.6;
+}
+
+/* 被屏蔽的弹幕内容样式 */
+.message-danmu .content:has(***) {
+    color: #ff6b6b;
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+/* 响应式 - 小屏幕 */
+@media (max-width: 768px) {
+    .block-words-input-group {
+        flex-direction: column;
+    }
+    
+    .block-words-input-group .btn-warning {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .block-words-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
     }
 }
